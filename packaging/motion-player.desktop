@@ -1,0 +1,21 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=memory-machine
+GenericName=Sensor Video Installation
+Comment=Gallery installation: lift headphones to play
+Exec=/usr/bin/motion-player
+Icon=motion-player
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=gpio;sensor;motion;video;raspberry;
+StartupNotify=true
+Actions=Debug;ViewLog;
+
+[Desktop Action Debug]
+Name=Run with visible log
+Exec=lxterminal --title="memory-machine (debug)" -e /usr/bin/motion-player --verbose
+
+[Desktop Action ViewLog]
+Name=Open log file
+Exec=/usr/bin/motion-player --log

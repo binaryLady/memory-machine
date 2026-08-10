@@ -1,0 +1,39 @@
+# memory-machine — gallery card
+
+## Normal operation
+
+1. Plug in the Raspberry Pi power.
+2. Wait about 30 seconds. The screen should show a still frame from the piece.
+3. Lift the headphones from the stand. Sound begins in the headphones and the
+   image on the wall plays in reverse.
+4. Put the headphones back. The sound fades, then stops, and the image returns
+   to the still frame.
+
+## If the screen is black
+
+1. Wait 30 seconds after plugging in — the Pi needs time to boot.
+2. If it is still black, unplug the power, wait 5 seconds, and plug it back in.
+3. If it stays black, check that the small sensor under the headphone stand
+   is connected and nothing is pressing on it.
+
+## Do not
+
+- Change any files, settings, or cables except the power cable.
+- Open a terminal or move the mouse/keyboard.
+- Turn off the monitor; only remove power from the Pi.
+
+## Contact
+
+If the piece is not responding after a power cycle, contact:
+
+**TheTechMargin**
+Sonia Cook-Broen — sonia@thetechmargin.com
+
+---
+
+## Technician's appendix
+
+- Sensor type wired: ___________________
+- GPIO pin: ___________________
+- The sensor at the headphone stand is the only hardware to check if lifts are
+  not detected.

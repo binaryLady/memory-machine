@@ -1,2 +1,233 @@
 # memory-machine
-custom GAN trained art player with sensor actions
+
+A Raspberry Pi gallery installation: lift the headphones from their stand and a
+video plays in reverse while the audio plays forward. Replace them and the piece
+returns to its idle state.
+
+This repository builds the `motion-player` Debian package. The package name is
+`motion-player`; the repo is `memory-machine`.
+
+## Quick start (on your laptop)
+
+```bash
+make lint        # syntax-check everything
+make check       # run pytest
+make deb         # build motion-player_*.deb
+make install     # install it locally (requires sudo)
+```
+
+Use `make release` to build a `.deb` with hard dependencies on the Pi Python
+libraries (`python3-opencv`, `python3-gpiozero`, `python3-lgpio`,
+`python3-pygame`).
+
+## Repo layout
+
+```
+src/                       Python engine
+  motion_test.py           entry point
+  config.py                config loading / validation
+  logging_setup.py         size-capped rotating log
+  state.py                 state machine
+  video.py                 OpenCV playback
+  audio.py                 pygame.mixer playback/fade
+  status.py                runtime status file + CLI
+  sensors/                 pluggable sensor backends
+config/
+  config.default.ini       shipped defaults
+packaging/
+  build_deb.sh             Debian package builder
+  motion-player.desktop    menu / desktop entry
+  motion-player.service    systemd user unit
+  icons/                   16px … 256px PNGs
+  make_icon.py             regenerate icons
+scripts/
+  bootstrap_pi.sh          one-time Pi setup
+  update.sh                source for /usr/bin/motion-player-update
+  status.sh                source for /usr/bin/motion-player-status
+VERSION                    package version
+Makefile
+README.md                  this file
+GALLERY.md                 laminated card for gallery staff
+```
+
+## Install on the Pi
+
+1. Generate a deploy key on the Pi and add it to this GitHub repo under
+   **Settings → Deploy keys** (write access only if you will push from the Pi).
+2. `ssh -T git@github.com` should succeed before continuing.
+3. Clone this repo and run the bootstrap:
+
+```bash
+git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+cd ~/memory-machine
+./scripts/bootstrap_pi.sh
+```
+
+The bootstrap installs dependencies, builds the release `.deb`, installs it,
+enables linger for your user, and starts the systemd user service.
+
+## Media
+
+Place the real video and audio files at:
+
+```
+/opt/motion-player/media/piece.mp4
+/opt/motion-player/media/piece.wav
+```
+
+(or edit `/etc/motion-player/config.ini` to point elsewhere). The package does
+not ship media; the app logs a clear "media missing" reason and shows a black
+screen if the files are absent.
+
+## Update from the Pi
+
+```bash
+/usr/bin/motion-player-update        # pull, rebuild, reinstall, restart
+/usr/bin/motion-player-update --check
+/usr/bin/motion-player-update --force # discard local changes, if any
+```
+
+If the checkout is not a git repo (e.g. installed from a release `.deb`), the
+script prints a friendly message instead of failing.
+
+## Status over SSH
+
+```bash
+/usr/bin/motion-player-status        # human-readable
+/usr/bin/motion-player-status --json # machine-readable
+```
+
+This shows uptime, systemd restart count, current state, sensor reading, lift
+and accepted/rejected transition counts, resolved audio sink, whether frames
+were preloaded, and the last error.
+
+## Config reference
+
+All configuration lives in `/etc/motion-player/config.ini`, root-owned `0644`.
+It is marked as a Debian `conffile`, so edits survive package upgrades. Unknown
+keys are warned and ignored; missing keys fall back to the default below.
+
+```ini
+[media]
+video_file          = piece.mp4        ; absolute or relative to /opt/motion-player/media/
+audio_file          = piece.wav
+
+[playback]
+idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
+reverse_rate        = native           ; native | fit_to_audio | <float>
+on_rewind_end       = hold             ; hold | loop_reverse | resume_forward
+preload_frames      = auto             ; auto | true | false
+fullscreen          = true
+display             = auto             ; auto | X11/Wayland display name
+
+[audio]
+audio_sink          = auto             ; ALSA/PipeWire device NAME
+volume              = 0.8              ; fixed 0.0–1.0
+fade_out_ms         = 400
+on_audio_end        = silence          ; silence | loop
+
+[sensor]
+sensor_type         = switch           ; switch | reed | beam | reflective |
+                                       ; capacitive | distance | hall | pir |
+                                       ; mmwave | gpio_raw | keyboard
+                                       ; or fused: switch+beam
+sensor_combine      = any              ; any | all
+engaged_when        = open             ; open | closed
+
+gpio_pin            = 4
+pull_up             = true
+
+; distance backends
+trigger_pin         = 23
+echo_pin            = 24
+threshold_cm        = 15
+i2c_address         = 0x29             ; set to use VL53L0X ToF instead of HC-SR04
+
+; capacitive
+touch_channel       = 0
+
+; timing
+bounce_time_ms      = 50
+min_lift_ms         = 250
+min_replace_ms      = 250
+max_engaged_minutes = 30
+
+[system]
+log_level           = info             ; debug | info | warning | error
+log_max_mb          = 20               ; cap across all rotated files
+restart_on_crash    = true
+```
+
+### Key config choices to make on site
+
+- `engaged_when`: with the headphones resting on a microswitch, lifting them
+  usually opens the contact, so `open` is the default. Verify with a multimeter.
+- `reverse_rate`: use `fit_to_audio` if the audio is longer than the footage;
+  it slows the rewind so frame 0 is reached exactly when the sound ends.
+
+## Sensor wiring
+
+| sensor_type  | Hardware                       | Notes                                                |
+| ------------ | ------------------------------ | ---------------------------------------------------- |
+| `switch`     | Lever microswitch under stand  | Default; headphone weight closes it.                 |
+| `reed`       | Reed switch + magnet in earcup | Same logic as `switch`.                              |
+| `beam`       | IR beam-break across cradle    | Shield from gallery lighting.                        |
+| `reflective` | TCRT5000 reflective proximity  | Drifts with ambient IR and earcup colour.            |
+| `capacitive` | MPR121 over I²C                | Senses hand, not headphone.                          |
+| `distance`   | HC-SR04 or VL53L0X             | Set `i2c_address` for ToF; otherwise HC-SR04.        |
+| `hall`       | Analog Hall + magnet           | Threshold-based.                                     |
+| `pir`        | Room PIR                       | Legacy; not recommended for headphone lift.          |
+| `mmwave`     | Presence module                | Uses the same `gpio_pin` as a digital presence line. |
+| `gpio_raw`   | Bare digital pin               | Escape hatch.                                        |
+| `keyboard`   | Spacebar                       | Laptop dev/test only.                                |
+
+Fuse sensors with `sensor_type = switch+beam` and `sensor_combine = any` (OR,
+survives one dying) or `all` (AND, kills false triggers).
+
+If the configured hardware cannot be initialised, the engine logs the error and
+falls back to `keyboard` so the piece keeps running.
+
+## Tuning debounce from the logs
+
+Every raw edge and accepted transition is logged to the `motion-player.transitions`
+logger. Greppable lines look like:
+
+```
+transition sensor=switch event=lift raw=engaged engaged_when=open accepted=true ts=12345.678
+```
+
+Tune `bounce_time_ms`, `min_lift_ms`, and `min_replace_ms` in
+`/etc/motion-player/config.ini`, then restart:
+
+```bash
+systemctl --user restart motion-player.service
+```
+
+## Logs
+
+Runtime logs go to:
+
+```
+~/.local/state/motion-player/motion-player.log
+```
+
+and are rotated so the total size stays near `log_max_mb`. The package never
+shows a traceback or dialog on screen.
+
+## Development on a laptop
+
+Use `sensor_type = keyboard` and run:
+
+```bash
+python3 src/motion_test.py --verbose --config config/config.default.ini
+```
+
+Keys in the OpenCV window:
+
+- `Space`: toggle lift/replace
+- `d`: dump current status to log
+- `q`: quit
+
+## License
+
+MIT License — Copyright 2026 TheTechMargin

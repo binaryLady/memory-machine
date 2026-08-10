@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Brief directory used to seed this repo; not part of the deliverable
+memory-machine-brief/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Build artifacts
+*.deb
+build/
+dist/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Runtime / state files (local dev only)
+*.log
+state.json
+status.json
