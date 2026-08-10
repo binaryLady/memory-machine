@@ -223,17 +223,24 @@ shows a traceback or dialog on screen.
 
 ## Remote telemetry
 
-Set `enabled = true` in the `[telemetry]` section and point `endpoint_url` at an
-HTTPS receiver. The engine POSTs JSON batches containing:
+Set `enabled = true` in the `[telemetry]` section. The default endpoint is:
+
+```
+https://lab.thetechmargin.com/memorymachine/api/telemetry
+```
+
+The engine POSTs JSON batches containing:
 
 - **Events:** every accepted `lift` and `replace`, with timestamp, source sensor,
   and current state.
 - **Heartbeats:** every `interval_s` with uptime, current state, raw sensor
   reading, lift/accepted/rejected counts, resolved audio sink, preload status,
-  and the last error.
+  last error, and a tail of the local log (`log_tail_lines`).
 
 Telemetry runs on a background thread and never blocks the main loop. Invalid
 or unreachable endpoints are logged but do not stop the piece.
+
+A prompt for building the receiving UI route is in `docs/ui-prompt.md`.
 
 ## Development on a laptop
 

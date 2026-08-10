@@ -168,7 +168,8 @@ def run(argv: list[str] | None = None) -> int:
         audio = AudioEngine(cfg)
         sensor = make_sensor(cfg.sensor)
         state = StateMachine(cfg, audio, video, status)
-        telemetry = Telemetry(cfg, status)
+        log_path = state_dir / "motion-player.log"
+        telemetry = Telemetry(cfg, status, log_path)
 
         problems = _preflight(cfg, video, audio)
         for problem in problems:

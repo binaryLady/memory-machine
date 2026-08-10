@@ -72,6 +72,7 @@ class TelemetryConfig:
     interval_s: int
     batch_size: int
     timeout_s: int
+    log_tail_lines: int
 
 
 @dataclass(frozen=True)
@@ -144,10 +145,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     "telemetry": {
         "enabled": False,
-        "endpoint_url": "",
+        "endpoint_url": "https://lab.thetechmargin.com/memorymachine/api/telemetry",
         "interval_s": 60,
         "batch_size": 10,
         "timeout_s": 5,
+        "log_tail_lines": 20,
     },
 }
 
@@ -315,6 +317,9 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             interval_s=_parse_int(telemetry_raw.get("interval_s"), DEFAULTS["telemetry"]["interval_s"], 1),
             batch_size=_parse_int(telemetry_raw.get("batch_size"), DEFAULTS["telemetry"]["batch_size"], 1),
             timeout_s=_parse_int(telemetry_raw.get("timeout_s"), DEFAULTS["telemetry"]["timeout_s"], 1),
+            log_tail_lines=_parse_int(
+                telemetry_raw.get("log_tail_lines"), DEFAULTS["telemetry"]["log_tail_lines"], 0
+            ),
         ),
         source_path=source,
     )

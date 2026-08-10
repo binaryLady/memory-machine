@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import config as config_module
 import status as status_module
+from pathlib import Path
 from telemetry import Telemetry
 
 
@@ -48,6 +49,7 @@ class _TelemetryConfig:
     interval_s: int
     batch_size: int
     timeout_s: int
+    log_tail_lines: int
 
 
 @dataclass
@@ -68,7 +70,7 @@ def test_disabled_telemetry_does_not_send() -> None:
     collector: list[dict[str, Any]] = []
     server = _make_server(collector)
     url = f"http://127.0.0.1:{server.server_port}/telemetry"
-    cfg = _Config(_TelemetryConfig(enabled=False, endpoint_url=url, interval_s=1, batch_size=10, timeout_s=2))
+    cfg = _Config(_TelemetryConfig(enabled=False, endpoint_url=url, interval_s=1, batch_size=10, timeout_s=2, log_tail_lines=0))
     tel = Telemetry(cfg, _fake_status())
     tel.start()
     tel.event("lift")
@@ -82,7 +84,7 @@ def test_event_is_posted_to_endpoint() -> None:
     collector: list[dict[str, Any]] = []
     server = _make_server(collector)
     url = f"http://127.0.0.1:{server.server_port}/telemetry"
-    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=60, batch_size=10, timeout_s=2))
+    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=60, batch_size=10, timeout_s=2, log_tail_lines=0))
     tel = Telemetry(cfg, _fake_status())
     tel.start()
     tel.event("lift", state="ENGAGED")
@@ -100,7 +102,7 @@ def test_heartbeat_is_sent_on_interval() -> None:
     collector: list[dict[str, Any]] = []
     server = _make_server(collector)
     url = f"http://127.0.0.1:{server.server_port}/telemetry"
-    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=1, batch_size=10, timeout_s=2))
+    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=1, batch_size=10, timeout_s=2, log_tail_lines=0))
     tel = Telemetry(cfg, _fake_status())
     tel.start()
     # No sensor is needed for heartbeat state fields.
@@ -115,6 +117,30 @@ def test_heartbeat_is_sent_on_interval() -> None:
     assert heartbeats[0]["lift_count"] == 3
     assert heartbeats[0]["accepted_count"] == 4
     assert heartbeats[0]["rejected_count"] == 1
+
+
+def test_heartbeat_includes_log_tail() -> None:
+    import tempfile
+
+    collector: list[dict[str, Any]] = []
+    server = _make_server(collector)
+    url = f"http://127.0.0.1:{server.server_port}/telemetry"
+    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=60, batch_size=10, timeout_s=2, log_tail_lines=5))
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+        f.write("line one\n")
+        f.write("line two\n")
+        log_path = f.name
+
+    tel = Telemetry(cfg, _fake_status(), Path(log_path))
+    tel.start()
+    tel.heartbeat()
+    time.sleep(0.2)
+    tel.stop()
+    server.shutdown()
+    heartbeats = [item for item in collector if item.get("event") == "heartbeat"]
+    assert len(heartbeats) == 1
+    assert heartbeats[0]["log_tail"] == ["line one\n", "line two\n"]
 
 
 def test_telemetry_url_must_be_http_or_https() -> None:

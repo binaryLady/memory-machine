@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 LOGGER = logging.getLogger("motion-player.telemetry")
@@ -35,12 +36,14 @@ class Telemetry:
     blocked by the network. Heartbeats are emitted on a fixed interval.
     """
 
-    def __init__(self, config: Any, status: Any) -> None:
+    def __init__(self, config: Any, status: Any, log_path: Path | None = None) -> None:
         self._enabled = config.telemetry.enabled
         self._endpoint = config.telemetry.endpoint_url.strip()
         self._interval_s = max(1, config.telemetry.interval_s)
         self._batch_size = max(1, config.telemetry.batch_size)
         self._timeout_s = max(1, config.telemetry.timeout_s)
+        self._log_tail_lines = max(0, config.telemetry.log_tail_lines)
+        self._log_path = log_path
         self._status = status
         self._queue: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1000)
         self._thread: threading.Thread | None = None
@@ -131,7 +134,18 @@ class Telemetry:
             audio_sink=data.audio_sink,
             frames_preloaded=data.frames_preloaded,
             last_error=data.last_error,
+            log_tail=self._read_log_tail(),
         )
+
+    def _read_log_tail(self) -> list[str]:
+        if self._log_path is None or self._log_tail_lines <= 0:
+            return []
+        try:
+            with open(self._log_path, "r", encoding="utf-8", errors="replace") as f:
+                return f.readlines()[-self._log_tail_lines :]
+        except OSError as exc:
+            LOGGER.debug("Could not read log tail for telemetry: %s", exc)
+            return []
 
     def _run(self) -> None:
         batch: list[dict[str, Any]] = []
