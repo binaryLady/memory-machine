@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Toggle the memory-machine systemd user service.
+# Default usage toggles. Pass --start or --stop to force an action.
+set -euo pipefail
+
+ACTION="toggle"
+
+for arg in "$@"; do
+    case "$arg" in
+        --start) ACTION="start" ;;
+        --stop)  ACTION="stop" ;;
+    esac
+done
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+SERVICE="motion-player.service"
+
+is_active() {
+    systemctl --user is-active "$SERVICE" >/dev/null 2>&1
+}
+
+run() {
+    systemctl --user "$1" "$SERVICE"
+}
+
+case "$ACTION" in
+    start)
+        run start
+        echo "memory-machine started."
+        ;;
+    stop)
+        run stop
+        echo "memory-machine stopped."
+        ;;
+    toggle)
+        if is_active; then
+            run stop
+            echo "memory-machine stopped."
+        else
+            run start
+            echo "memory-machine started."
+        fi
+        ;;
+esac

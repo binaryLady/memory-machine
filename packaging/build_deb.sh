@@ -207,6 +207,9 @@ echo "Updated and restarted."
 UPDATE
 chmod 0755 "$STAGE/usr/bin/motion-player-update"
 
+cp "$REPO_ROOT/packaging/motion-player-toggle" "$STAGE/usr/bin/motion-player-toggle"
+chmod 0755 "$STAGE/usr/bin/motion-player-toggle"
+
 # ---------------------------------------------------------------------------
 # 6. systemd user service
 # ---------------------------------------------------------------------------
