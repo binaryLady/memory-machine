@@ -152,6 +152,13 @@ min_lift_ms         = 250
 min_replace_ms      = 250
 max_engaged_minutes = 30
 
+[telemetry]
+enabled             = false            ; true | false
+endpoint_url        =                  ; http:// or https://
+interval_s          = 60               ; heartbeat interval
+batch_size          = 10               ; events per POST
+timeout_s           = 5                ; HTTP timeout
+
 [system]
 log_level           = info             ; debug | info | warning | error
 log_max_mb          = 20               ; cap across all rotated files
@@ -213,6 +220,27 @@ Runtime logs go to:
 
 and are rotated so the total size stays near `log_max_mb`. The package never
 shows a traceback or dialog on screen.
+
+## Remote telemetry
+
+Set `enabled = true` in the `[telemetry]` section. The default endpoint is:
+
+```
+https://lab.thetechmargin.com/memorymachine/api/telemetry
+```
+
+The engine POSTs JSON batches containing:
+
+- **Events:** every accepted `lift` and `replace`, with timestamp, source sensor,
+  and current state.
+- **Heartbeats:** every `interval_s` with uptime, current state, raw sensor
+  reading, lift/accepted/rejected counts, resolved audio sink, preload status,
+  last error, and a tail of the local log (`log_tail_lines`).
+
+Telemetry runs on a background thread and never blocks the main loop. Invalid
+or unreachable endpoints are logged but do not stop the piece.
+
+A prompt for building the receiving UI route is in `docs/ui-prompt.md`.
 
 ## Development on a laptop
 

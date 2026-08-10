@@ -2,6 +2,7 @@
 """Runtime status file writer and motion-player-status CLI."""
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -97,6 +98,9 @@ class StatusWriter:
     def set_last_error(self, message: str) -> None:
         self._status.last_error = message
         self.write()
+
+    def snapshot(self) -> dict[str, Any]:
+        return dataclasses.asdict(self._status)
 
     def write(self) -> None:
         self._status.write()

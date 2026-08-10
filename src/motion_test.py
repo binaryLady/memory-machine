@@ -19,6 +19,7 @@ import status as status_module
 from audio import AudioEngine
 from sensors import make_sensor
 from state import StateMachine
+from telemetry import Telemetry
 from video import VideoEngine
 
 LOGGER = logging.getLogger("motion-player")
@@ -63,13 +64,14 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
 
 
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
-               status: status_module.StatusWriter, lock_fd: int) -> int:
+               status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int) -> int:
     events: queue.Queue = queue.Queue()
     sensor.start(events)
     status.set_sensor(sensor)
     video.set_audio_duration(audio.duration_s)
     video.set_mode("IDLE")
     status.set_frames_preloaded(getattr(video, "_preload", False))
+    telemetry.start()
 
     # Track whether audio was playing to emit audio_end cleanly.
     state.mark_audio_playing()
@@ -83,6 +85,12 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                 LOGGER.debug("Event from queue: %s %s %s", event, ts, source)
                 state.handle(event)
                 status.set_state(state.state)
+                telemetry.event(
+                    event,
+                    source=source,
+                    state=state.state,
+                    monotonic_ts=ts,
+                )
         except queue.Empty:
             pass
 
@@ -94,7 +102,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                 LOGGER.info("Quit requested from keyboard")
                 break
             if cmd == "dump":
-                LOGGER.info("Status dump: %s", status._status.__dict__)
+                LOGGER.info("Status dump: %s", status.snapshot())
 
         # Timer-based transitions (max-engaged timeout, audio end detection).
         now = time.monotonic()
@@ -104,6 +112,9 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         # Video at-start detection.
         if state.state == "ENGAGED" and video.at_start:
             state.handle("video_at_start")
+
+        # Periodic telemetry heartbeat.
+        telemetry.heartbeat(sensor)
 
         # Advance video frame, paced by monotonic clock.
         video.render_next()
@@ -157,13 +168,15 @@ def run(argv: list[str] | None = None) -> int:
         audio = AudioEngine(cfg)
         sensor = make_sensor(cfg.sensor)
         state = StateMachine(cfg, audio, video, status)
+        log_path = state_dir / "motion-player.log"
+        telemetry = Telemetry(cfg, status, log_path)
 
         problems = _preflight(cfg, video, audio)
         for problem in problems:
             LOGGER.warning("Preflight: %s", problem)
             status.set_last_error(problem)
 
-        return _main_loop(cfg, sensor, video, audio, state, status, lock_fd)
+        return _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd)
     except Exception as exc:  # noqa: BLE001
         LOGGER.critical("Unhandled exception: %s\n%s", exc, traceback.format_exc())
         status.set_last_error(str(exc))
@@ -175,6 +188,10 @@ def run(argv: list[str] | None = None) -> int:
             pass
         try:
             video.release()  # type: ignore[has-type]
+        except NameError:
+            pass
+        try:
+            telemetry.stop()  # type: ignore[has-type]
         except NameError:
             pass
         _release_lock(lock_fd)
