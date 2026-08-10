@@ -1,0 +1,67 @@
+name: Build and release .deb
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  tags:
+    - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build/test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev desktop-file-utils
+          pip install pytest
+
+      - name: Lint and test
+        run: |
+          make lint
+          make check
+
+      - name: Build release .deb
+        run: make release
+
+      - name: Inspect package
+        run: |
+          ls -la motion-player_*.deb
+          dpkg-deb -I motion-player_*.deb
+          dpkg-deb -c motion-player_*.deb
+
+      - name: Test install in Debian container
+        run: |
+          docker run --rm -v "$PWD:/workspace" debian:bookworm-slim \
+            bash -c "dpkg -i /workspace/motion-player_*.deb || apt-get update && apt-get install -fy"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-player-deb
+          path: motion-player_*.deb
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: motion-player-deb
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: motion-player_*.deb
