@@ -75,9 +75,14 @@ Place the real video and audio files at:
 /opt/motion-player/media/piece.wav
 ```
 
-(or edit `/etc/motion-player/config.ini` to point elsewhere). The package does
-not ship media; the app logs a clear "media missing" reason and shows a black
-screen if the files are absent.
+The installer creates a desktop shortcut called **motion-player-media** that
+opens that folder, so you can drag and drop files without using a terminal.
+You can also right-click the **memory-machine** icon and choose **Open media
+folder**.
+
+If you use different file names, edit `/etc/motion-player/config.ini` to point
+elsewhere. The package does not ship media; the app logs a clear "media missing"
+reason and shows a black screen if the files are absent.
 
 ## Update from the Pi
 
