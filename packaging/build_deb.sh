@@ -296,6 +296,19 @@ if [ "$1" = "configure" ]; then
         systemctl --system daemon-reload >/dev/null 2>&1 || true
     fi
 
+    MEDIA_DIR=/opt/motion-player/media
+    mkdir -p "$MEDIA_DIR"
+
+    # Make the media directory writable by the user who installed the package.
+    OWNER="${SUDO_USER:-}"
+    if [ -z "$OWNER" ]; then
+        OWNER=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')
+    fi
+    if [ -n "$OWNER" ]; then
+        chown "$OWNER:$OWNER" "$MEDIA_DIR" 2>/dev/null || true
+        chmod 0755 "$MEDIA_DIR"
+    fi
+
     SRC=/usr/share/applications/motion-player.desktop
     getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' | while IFS=: read -r U H; do
         [ -d "$H/Desktop" ] || continue
@@ -307,6 +320,9 @@ if [ "$1" = "configure" ]; then
                 "$H/Desktop/motion-player.desktop" metadata::trusted true \
                 >/dev/null 2>&1 || true
         fi
+        # Add a shortcut to the media folder so the gallery can drop in new files.
+        ln -sfn "$MEDIA_DIR" "$H/Desktop/motion-player-media" 2>/dev/null || true
+        chown -h "$U" "$H/Desktop/motion-player-media" 2>/dev/null || true
     done
 fi
 exit 0
@@ -318,6 +334,7 @@ set -e
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $6}' | while read -r H; do
         rm -f "$H/Desktop/motion-player.desktop" || true
+        rm -f "$H/Desktop/motion-player-media" || true
     done
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database -q /usr/share/applications || true
