@@ -6,6 +6,7 @@ import dataclasses
 import logging
 import os
 import re
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -65,12 +66,22 @@ class SystemConfig:
 
 
 @dataclass(frozen=True)
+class TelemetryConfig:
+    enabled: bool
+    endpoint_url: str
+    interval_s: int
+    batch_size: int
+    timeout_s: int
+
+
+@dataclass(frozen=True)
 class Config:
     media: MediaConfig
     playback: PlaybackConfig
     audio: AudioConfig
     sensor: SensorConfig
     system: SystemConfig
+    telemetry: TelemetryConfig
     source_path: Path
 
     def dump(self) -> str:
@@ -81,6 +92,7 @@ class Config:
             ("audio", self.audio),
             ("sensor", self.sensor),
             ("system", self.system),
+            ("telemetry", self.telemetry),
         ):
             lines.append(f"[{section_name}]")
             for field in dataclasses.fields(section):
@@ -129,6 +141,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "log_level": "info",
         "log_max_mb": 20,
         "restart_on_crash": True,
+    },
+    "telemetry": {
+        "enabled": False,
+        "endpoint_url": "",
+        "interval_s": 60,
+        "batch_size": 10,
+        "timeout_s": 5,
     },
 }
 
@@ -244,6 +263,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
     audio_raw = _section("audio")
     sensor_raw = _section("sensor")
     system_raw = _section("system")
+    telemetry_raw = _section("telemetry")
 
     config = Config(
         media=MediaConfig(
@@ -288,6 +308,13 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             log_level=str(system_raw.get("log_level", DEFAULTS["system"]["log_level"])),
             log_max_mb=_parse_int(system_raw.get("log_max_mb"), DEFAULTS["system"]["log_max_mb"], 1),
             restart_on_crash=_parse_bool(system_raw.get("restart_on_crash"), DEFAULTS["system"]["restart_on_crash"]),
+        ),
+        telemetry=TelemetryConfig(
+            enabled=_parse_bool(telemetry_raw.get("enabled"), DEFAULTS["telemetry"]["enabled"]),
+            endpoint_url=str(telemetry_raw.get("endpoint_url", DEFAULTS["telemetry"]["endpoint_url"])),
+            interval_s=_parse_int(telemetry_raw.get("interval_s"), DEFAULTS["telemetry"]["interval_s"], 1),
+            batch_size=_parse_int(telemetry_raw.get("batch_size"), DEFAULTS["telemetry"]["batch_size"], 1),
+            timeout_s=_parse_int(telemetry_raw.get("timeout_s"), DEFAULTS["telemetry"]["timeout_s"], 1),
         ),
         source_path=source,
     )
@@ -342,5 +369,13 @@ def validate(config: Config) -> list[str]:
 
     if config.system.log_max_mb < 1:
         problems.append("system.log_max_mb must be at least 1")
+
+    if config.telemetry.enabled:
+        url = config.telemetry.endpoint_url
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            problems.append(
+                f"telemetry.endpoint_url must be an http:// or https:// URL; got {url!r}"
+            )
 
     return problems
