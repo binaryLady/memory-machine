@@ -4,13 +4,21 @@ Type=Application
 Name=memory-machine
 GenericName=Sensor Video Installation
 Comment=Gallery installation: lift headphones to play
-Exec=/usr/bin/motion-player
+Exec=/usr/bin/motion-player-toggle
 Icon=motion-player
 Terminal=false
 Categories=AudioVideo;Video;Player;
 Keywords=gpio;sensor;motion;video;raspberry;
 StartupNotify=true
-Actions=Debug;ViewLog;
+Actions=Start;Stop;Debug;ViewLog;
+
+[Desktop Action Start]
+Name=Start
+Exec=/usr/bin/motion-player-toggle --start
+
+[Desktop Action Stop]
+Name=Stop
+Exec=/usr/bin/motion-player-toggle --stop
 
 [Desktop Action Debug]
 Name=Run with visible log

@@ -9,6 +9,13 @@
 4. Put the headphones back. The sound fades, then stops, and the image returns
    to the still frame.
 
+## Start and stop from the desktop
+
+If the Pi is on the desktop instead of auto-starting, double-click the
+**memory-machine** icon to start the piece. Click it again to stop.
+
+You can also right-click the icon and choose **Start** or **Stop**.
+
 ## If the screen is black
 
 1. Wait 30 seconds after plugging in — the Pi needs time to boot.
