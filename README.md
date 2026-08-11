@@ -68,17 +68,17 @@ enables linger for your user, and starts the systemd user service.
 
 ## Media
 
-Place the real video and audio files at:
+Place the real video and audio files in the **memory-machine-media** folder on
+the desktop:
 
 ```
-/opt/motion-player/media/piece.mp4
-/opt/motion-player/media/piece.wav
+~/memory-machine-media/piece.mp4
+~/memory-machine-media/piece.wav
 ```
 
-The installer creates a desktop shortcut called **motion-player-media** that
-opens that folder, so you can drag and drop files without using a terminal.
-You can also right-click the **memory-machine** icon and choose **Open media
-folder**.
+The installer creates that folder and a desktop shortcut, so you can drag and
+drop files without using a terminal. You can also right-click the
+**memory-machine** icon and choose **Open media folder**.
 
 If you use different file names, edit `/etc/motion-player/config.ini` to point
 elsewhere. The package does not ship media; the app logs a clear "media missing"

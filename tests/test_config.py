@@ -65,7 +65,7 @@ def test_out_of_range_values_are_clamped(tmp_path: Path) -> None:
 def test_relative_media_paths_resolve(tmp_path: Path) -> None:
     path = _write(tmp_path, "[media]\nvideo_file = custom.mp4\n")
     cfg = config.load(path)
-    assert cfg.media.video_file == Path("/opt/motion-player/media/custom.mp4")
+    assert cfg.media.video_file == Path.home() / "memory-machine-media/custom.mp4"
 
 
 def test_validate_reports_missing_files(tmp_path: Path) -> None:
