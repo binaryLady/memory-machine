@@ -13,7 +13,7 @@ from typing import Any, Iterable
 
 LOGGER = logging.getLogger("motion-player.config")
 
-MEDIA_DIR = Path("/opt/motion-player/media")
+MEDIA_DIR = Path.home() / "memory-machine-media"
 
 
 @dataclass(frozen=True)

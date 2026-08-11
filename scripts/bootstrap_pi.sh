@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_DIR="${1:-$HOME/memory-machine}"
-MEDIA_DIR="/opt/motion-player/media"
+MEDIA_DIR="$HOME/memory-machine-media"
 
 echo "Bootstrapping memory-machine in $REPO_DIR"
 
@@ -22,9 +22,8 @@ if [ -n "$LEGACY" ] && [ "$LEGACY" != "$REPO_DIR/src/motion_test.py" ]; then
     cp "$LEGACY" "$REPO_DIR/legacy_motion_test.py"
 fi
 
-# Ensure runtime directories exist.
-sudo mkdir -p "$MEDIA_DIR"
-sudo chmod 755 "$MEDIA_DIR"
+# Create a simple A/V directory in the user's home for drag-and-drop media swaps.
+mkdir -p "$MEDIA_DIR"
 
 # Install build and runtime dependencies.
 sudo apt update
@@ -45,5 +44,5 @@ systemctl --user enable motion-player.service
 systemctl --user start motion-player.service
 
 echo "Bootstrap complete."
-echo "Place your media at $MEDIA_DIR/ and restart the service if needed:"
-echo "  systemctl --user restart motion-player.service"
+echo "Place your media in $MEDIA_DIR/ (there is a desktop shortcut called memory-machine-media)."
+echo "Restart the service if needed: systemctl --user restart motion-player.service"
