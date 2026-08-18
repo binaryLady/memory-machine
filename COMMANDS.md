@@ -5,6 +5,33 @@ on the Pi unless marked **(laptop)**.
 
 ---
 
+## Every command at a glance
+
+| Command | Flags | What it does |
+| --- | --- | --- |
+| `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
+| `motion-player-status` | `--json` | state, sensor, audio sink, display mode, last error, resolved config |
+| `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
+| `motion-player-prepare` | `--size WxH` `--mode fit\|fill` | render the piece at the screen's resolution and build its reverse |
+| `motion-player-reverse` | `[SRC] [DST]` | build the pre-rendered reverse clip |
+| `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
+| `motion-player-media` | — | open the media folder in the file manager |
+| `motion-player` | `--check-config` `--verbose` `--log` `--config PATH` | the engine itself |
+
+`motion-player-install-deb` also exists but is not meant to be run by hand: it
+installs the newest built package and exists so unattended updates can hold one
+fixed `sudoers` rule.
+
+Two things worth committing to memory:
+
+- **`--verbose` must come first** when running the piece, or output goes to the
+  log instead of your terminal. `--check-config`, `--log` and `--help` are
+  exempt.
+- **`q` or `Esc` quits** from any sensor backend — the way out of fullscreen
+  without another machine.
+
+---
+
 ## Getting started
 
 First install on a fresh Pi. The bootstrap installs dependencies, builds and
