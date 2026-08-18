@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import display
-from playback_math import compute_reverse_step
+from playback_math import ScalePlan, compute_reverse_step, compute_scaling
 
 LOGGER = logging.getLogger("motion-player.video")
 
@@ -52,6 +52,10 @@ class VideoEngine:
         # by _rewind() on every mode entry, so the two captures never share it.
         self._stream_pos = 0
         self._black_frame: Any = None
+        self._scaling = str(self._config.scaling)
+        self._output_size: tuple[int, int] | None = None
+        self._plan: ScalePlan | None = None
+        self._canvas: Any = None
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._load()
@@ -211,12 +215,60 @@ class VideoEngine:
             self._last_frame = frame
             self._stream_pos += 1
 
+    def _output_rect(self) -> tuple[int, int] | None:
+        """Size of the surface we are drawing onto, once the window has one."""
+        if self._output_size is not None:
+            return self._output_size
+        getter = getattr(self._cv2, "getWindowImageRect", None)
+        if getter is None:
+            return None
+        try:
+            _x, _y, width, height = getter(self._title)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("Could not read the window rect: %s", exc)
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        self._output_size = (width, height)
+        LOGGER.info("Output surface %dx%d, scaling=%s", width, height, self._scaling)
+        return self._output_size
+
+    def _scale(self, frame: Any) -> Any:
+        if self._scaling == "stretch":
+            return frame
+        output = self._output_rect()
+        if output is None:
+            return frame
+
+        if self._plan is None:
+            self._plan = compute_scaling(self._width, self._height, output[0], output[1], self._scaling)
+            if self._plan is None:
+                # Nothing to do for this pairing; stop re-planning every frame.
+                self._scaling = "stretch"
+                return frame
+
+        plan = self._plan
+        crop_x, crop_y, crop_w, crop_h = plan.crop
+        cropped = frame[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+        resized = self._cv2.resize(cropped, plan.size, interpolation=self._cv2.INTER_LINEAR)
+        if plan.canvas is None:
+            return resized
+
+        canvas_w, canvas_h = plan.canvas
+        if self._canvas is None:
+            # Reused between frames; the pasted region is fully overwritten and
+            # the padding around it stays black.
+            self._canvas = self._np.zeros((canvas_h, canvas_w, 3), dtype=self._np.uint8)
+        off_x, off_y = plan.offset
+        self._canvas[off_y:off_y + plan.size[1], off_x:off_x + plan.size[0]] = resized
+        return self._canvas
+
     def _show(self, frame: Any) -> None:
         if frame is None:
             self._render_black()
             return
         try:
-            self._cv2.imshow(self._title, frame)
+            self._cv2.imshow(self._title, self._scale(frame))
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("cv2.imshow failed: %s", exc)
 

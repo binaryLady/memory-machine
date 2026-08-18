@@ -144,6 +144,7 @@ reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
 reverse_rate        = native           ; native | fit_to_audio | <float>
 on_rewind_end       = hold             ; hold | loop_reverse | resume_forward
+scaling             = fit              ; fit | fill | stretch
 fullscreen          = true
 display             = auto             ; auto | HDMI-A-1 | HDMI-A-2
 display_mode        = auto             ; auto | 1920x1080@60, re-pinned each start

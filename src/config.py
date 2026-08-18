@@ -30,6 +30,7 @@ class PlaybackConfig:
     idle_mode: str
     reverse_rate: str
     on_rewind_end: str
+    scaling: str
     fullscreen: bool
     display: str
     display_mode: str
@@ -116,6 +117,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "idle_mode": "hold_first_frame",
         "reverse_rate": "native",
         "on_rewind_end": "hold",
+        "scaling": "fit",
         "fullscreen": True,
         "display": "auto",
         "display_mode": "auto",
@@ -160,6 +162,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 _VALID_IDLE_MODES = {"hold_first_frame", "loop_forward", "black"}
 _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
+_VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
     "none",
@@ -281,6 +284,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             idle_mode=str(playback_raw.get("idle_mode", DEFAULTS["playback"]["idle_mode"])),
             reverse_rate=str(playback_raw.get("reverse_rate", DEFAULTS["playback"]["reverse_rate"])),
             on_rewind_end=str(playback_raw.get("on_rewind_end", DEFAULTS["playback"]["on_rewind_end"])),
+            scaling=str(playback_raw.get("scaling", DEFAULTS["playback"]["scaling"])),
             fullscreen=_parse_bool(playback_raw.get("fullscreen"), DEFAULTS["playback"]["fullscreen"]),
             display=str(playback_raw.get("display", DEFAULTS["playback"]["display"])),
             display_mode=str(playback_raw.get("display_mode", DEFAULTS["playback"]["display_mode"])),
@@ -362,6 +366,11 @@ def validate(config: Config) -> list[str]:
         problems.append(f"sensor.sensor_type contains unknown backends: {unknown}")
     if not types:
         problems.append("sensor.sensor_type is empty")
+
+    if config.playback.scaling not in _VALID_SCALING:
+        problems.append(
+            f"playback.scaling must be one of {_VALID_SCALING}; got {config.playback.scaling!r}"
+        )
 
     dm = config.playback.display_mode
     if dm != "auto" and not display.is_valid_mode(dm):

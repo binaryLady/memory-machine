@@ -508,6 +508,24 @@ ls -l /dev/gpiochip*; id -nG | tr ' ' '\n' | grep -qx gpio && echo "in the gpio 
 Adding yourself to the group needs a fresh login to take effect:
 `sudo usermod -aG gpio "$USER"`.
 
+**The picture looks stretched, or has black bars.** `playback.scaling` decides
+how a frame meets a screen of a different shape:
+
+| scaling | Behaviour |
+| --- | --- |
+| `fit` | keeps the whole frame and pads the rest with black (default) |
+| `fill` | covers the screen and crops whatever overflows |
+| `stretch` | distorts the frame to fill the screen |
+
+A 1280x1280 square piece on a 1920x1080 screen shows as a 1080x1080 square with
+420px black bars under `fit`, or covers the screen under `fill` by cropping the
+top and bottom 280px. `stretch` was the old behaviour and makes everything 1.5x
+too wide. Check what the engine is working with:
+
+```bash
+grep -E "Video loaded|Output surface" ~/.local/state/motion-player/motion-player.log | tail -2
+```
+
 **No audio.** Confirm the mixer opened and which sink it picked:
 
 ```bash

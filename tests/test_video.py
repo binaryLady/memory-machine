@@ -79,6 +79,7 @@ class FakePlayback:
     idle_mode: str = "hold_first_frame"
     reverse_rate: str = "native"
     on_rewind_end: str = "hold"
+    scaling: str = "stretch"
     fullscreen: bool = True
     display: str = "auto"
     display_mode: str = "auto"
@@ -259,3 +260,16 @@ def test_overriding_to_the_same_mode_is_a_no_op(monkeypatch: pytest.MonkeyPatch,
     engine.set_idle_mode("hold_first_frame")
 
     assert engine._idle_mode == "hold_first_frame"
+
+
+def test_scaling_is_skipped_when_the_window_size_is_unknown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """No getWindowImageRect means no reliable output size; pass frames through."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, scaling="fit")
+
+    frame = ("frame", 7)
+
+    assert engine._scale(frame) is frame
+    assert engine._output_rect() is None
