@@ -301,3 +301,66 @@ def test_rewind_duration_is_zero_without_a_clip(monkeypatch: pytest.MonkeyPatch)
     engine = make_engine(monkeypatch, "/nonexistent/piece.mp4")
 
     assert engine.rewind_duration_s == 0.0
+
+
+def _with_rect(cv2_stub: Any, width: int, height: int) -> None:
+    cv2_stub.window_props = getattr(cv2_stub, "window_props", [])
+    cv2_stub.setWindowProperty = lambda *args: cv2_stub.window_props.append(args)
+    cv2_stub.getWindowImageRect = lambda title: (0, 0, width, height)
+
+
+def test_an_unmapped_window_is_not_scaled_into(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """98x28 is a placeholder, not a screen; rendering into it gives a stamp."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, scaling="fit")
+    import cv2
+
+    _with_rect(cv2, 98, 28)
+    frame = ("frame", 1)
+
+    assert engine._scale(frame) is frame
+    assert engine._output_rect() is None
+    assert cv2.window_props, "fullscreen should be re-asserted, not accepted"
+
+
+def test_fullscreen_is_not_re_asserted_forever(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, scaling="fit")
+    import cv2
+
+    _with_rect(cv2, 98, 28)
+    for _ in range(40):
+        engine._output_rect()
+
+    assert engine._fullscreen_attempts <= 10
+
+
+def test_a_mapped_window_is_used(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, scaling="fit")
+    import cv2
+
+    _with_rect(cv2, 1920, 1080)
+
+    assert engine._output_rect() == (1920, 1080)
+
+
+def test_the_window_size_is_re_read_rather_than_pinned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """The first answer can be a placeholder, so it must not be cached forever."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, scaling="fit")
+    import cv2
+
+    _with_rect(cv2, 1920, 1080)
+    assert engine._output_rect() == (1920, 1080)
+
+    _with_rect(cv2, 1280, 720)
+    engine._frames_since_rect_check = 999
+
+    assert engine._output_rect() == (1280, 720)

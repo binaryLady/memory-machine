@@ -11,6 +11,13 @@ from playback_math import ScalePlan, compute_reverse_step, compute_scaling
 
 LOGGER = logging.getLogger("motion-player.video")
 
+# Roughly once a second at 30fps.
+_RECT_RECHECK_FRAMES = 30
+# A window smaller than this has not been mapped to the screen yet; scaling into
+# it would render the piece as a postage stamp.
+_MIN_PLAUSIBLE_AREA = 320 * 240
+_FULLSCREEN_ATTEMPTS = 10
+
 # Local import only when cv2 is available; the module itself may be imported on
 # laptops for config/status, so delay the heavy import until construction.
 
@@ -55,7 +62,11 @@ class VideoEngine:
         self._scaling = str(self._config.scaling)
         self._output_size: tuple[int, int] | None = None
         self._plan: ScalePlan | None = None
+        self._plan_for: tuple[int, int] | None = None
         self._canvas: Any = None
+        self._frames_since_rect_check = 0
+        self._fullscreen_settled = False
+        self._fullscreen_attempts = 0
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._load()
@@ -120,13 +131,12 @@ class VideoEngine:
     def _create_window(self) -> None:
         self._cv2.namedWindow(self._title, self._cv2.WINDOW_NORMAL)
         if self._config.fullscreen:
-            self._cv2.setWindowProperty(
-                self._title, self._cv2.WND_PROP_FULLSCREEN, self._cv2.WINDOW_FULLSCREEN
-            )
+            self._apply_fullscreen()
         else:
             self._cv2.setWindowProperty(
                 self._title, self._cv2.WND_PROP_FULLSCREEN, self._cv2.WINDOW_NORMAL
             )
+            self._fullscreen_settled = True
         if self._config.display and self._config.display != "auto":
             # Best-effort move to the requested display (X11/Wayland XWayland).
             try:
@@ -215,22 +225,64 @@ class VideoEngine:
             self._last_frame = frame
             self._stream_pos += 1
 
+    def _apply_fullscreen(self) -> None:
+        """Ask for fullscreen again.
+
+        Several window managers ignore the property until the window has been
+        mapped with content, leaving a placeholder-sized window behind. One call
+        at construction is not enough, so this is re-asserted until the window
+        actually has a sensible size.
+        """
+        if self._fullscreen_settled or self._fullscreen_attempts >= _FULLSCREEN_ATTEMPTS:
+            return
+        self._fullscreen_attempts += 1
+        try:
+            self._cv2.setWindowProperty(
+                self._title, self._cv2.WND_PROP_FULLSCREEN, self._cv2.WINDOW_FULLSCREEN
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("Could not set fullscreen: %s", exc)
+
     def _output_rect(self) -> tuple[int, int] | None:
-        """Size of the surface we are drawing onto, once the window has one."""
-        if self._output_size is not None:
+        """Size of the surface we are drawing onto.
+
+        Re-read periodically rather than cached once: the window reports a
+        placeholder size until the compositor has mapped it fullscreen, and
+        pinning the first answer scales every later frame to that placeholder.
+        Re-reading also picks up a genuine mode change under the running piece.
+        """
+        self._frames_since_rect_check += 1
+        if self._output_size is not None and self._frames_since_rect_check < _RECT_RECHECK_FRAMES:
             return self._output_size
+        self._frames_since_rect_check = 0
+
         getter = getattr(self._cv2, "getWindowImageRect", None)
         if getter is None:
-            return None
+            return self._output_size
         try:
             _x, _y, width, height = getter(self._title)
         except Exception as exc:  # noqa: BLE001
             LOGGER.debug("Could not read the window rect: %s", exc)
-            return None
+            return self._output_size
         if width <= 0 or height <= 0:
+            return self._output_size
+
+        if width * height < _MIN_PLAUSIBLE_AREA and self._config.fullscreen:
+            if self._fullscreen_attempts < _FULLSCREEN_ATTEMPTS:
+                LOGGER.warning(
+                    "Window is only %dx%d; re-asserting fullscreen (attempt %d)",
+                    width,
+                    height,
+                    self._fullscreen_attempts + 1,
+                )
+            self._apply_fullscreen()
+            # Don't plan against a window that has not been mapped yet.
             return None
-        self._output_size = (width, height)
-        LOGGER.info("Output surface %dx%d, scaling=%s", width, height, self._scaling)
+
+        self._fullscreen_settled = True
+        if (width, height) != self._output_size:
+            LOGGER.info("Output surface %dx%d, scaling=%s", width, height, self._scaling)
+            self._output_size = (width, height)
         return self._output_size
 
     def _scale(self, frame: Any) -> Any:
@@ -240,12 +292,12 @@ class VideoEngine:
         if output is None:
             return frame
 
-        if self._plan is None:
+        if self._plan_for != output:
             self._plan = compute_scaling(self._width, self._height, output[0], output[1], self._scaling)
-            if self._plan is None:
-                # Nothing to do for this pairing; stop re-planning every frame.
-                self._scaling = "stretch"
-                return frame
+            self._plan_for = output
+            self._canvas = None
+        if self._plan is None:
+            return frame
 
         plan = self._plan
         crop_x, crop_y, crop_w, crop_h = plan.crop
