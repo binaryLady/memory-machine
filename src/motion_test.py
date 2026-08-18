@@ -182,6 +182,14 @@ def run(argv: list[str] | None = None) -> int:
     state_dir = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "motion-player"
     lock_fd = _acquire_lock(state_dir)
 
+    # lgpio writes its notification FIFOs into the working directory, so a
+    # read-only one makes every GPIO backend fail with a bare ENOENT. The
+    # launcher already starts us somewhere writable; this covers being run
+    # directly from somewhere that is not.
+    if not os.access(os.getcwd(), os.W_OK):
+        LOGGER.info("Working directory %s is not writable; using %s", os.getcwd(), state_dir)
+        os.chdir(state_dir)
+
     status = status_module.StatusWriter()
     status.set_last_error("")
 

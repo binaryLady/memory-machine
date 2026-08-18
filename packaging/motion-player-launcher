@@ -79,7 +79,12 @@ if [ "$WAITED" -gt 0 ]; then
 fi
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
 
-cd "$APP_DIR" || exit 1
+# lgpio creates its notification FIFOs in the working directory, so this must
+# be somewhere writable. /opt/motion-player is root-owned, and running from
+# there makes every GPIO backend fail with a bare ENOENT on .lgd-nfy-N. Python
+# puts the script's own directory on sys.path regardless of where we are, so
+# nothing depends on being in APP_DIR.
+cd "$STATE_DIR" || exit 1
 
 # Hide cursor; ignore if unclutter is not installed.
 if command -v unclutter >/dev/null 2>&1; then
