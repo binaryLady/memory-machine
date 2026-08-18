@@ -132,3 +132,26 @@ def test_stuck_engaged_timeout_forces_idle() -> None:
     assert sm.state == IDLE
     assert audio.fade_calls == 1
     assert video.mode == "IDLE"
+
+
+def test_hold_at_rewind_end_stops_the_audio_with_the_picture() -> None:
+    """A wav longer than the clip must not play on over a black screen."""
+    sm, audio, video = _make_sm(rewind_end="hold")
+    sm.handle("lift")
+    assert audio.fade_calls == 0
+
+    sm.handle("video_at_start")
+
+    assert video.mode == "BLACK"
+    assert audio.fade_calls == 1
+
+
+def test_looping_rewind_leaves_the_audio_alone() -> None:
+    """The picture keeps going, so the sound should too."""
+    sm, audio, video = _make_sm(rewind_end="loop_reverse")
+    sm.handle("lift")
+
+    sm.handle("video_at_start")
+
+    assert video.mode == "REVERSE"
+    assert audio.fade_calls == 0

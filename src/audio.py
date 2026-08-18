@@ -26,6 +26,7 @@ class AudioEngine:
         self._sound: Any = None
         self._resolved_sink = "default"
         self._duration_s = 0.0
+        self._max_duration_s = 0.0
 
         self._init_mixer()
         self._load()
@@ -105,14 +106,31 @@ class AudioEngine:
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("Could not load audio %s: %s", self._audio_path, exc)
 
+    def set_max_duration(self, seconds: float) -> None:
+        """Cap playback so the audio can never outlast the picture.
+
+        A wav longer than the clip would otherwise keep playing over a held or
+        black frame once the rewind has finished.
+        """
+        self._max_duration_s = max(0.0, seconds)
+        if 0 < self._max_duration_s < self._duration_s:
+            LOGGER.info(
+                "Audio is %.1fs but the picture lasts %.1fs; playback will stop with it",
+                self._duration_s,
+                self._max_duration_s,
+            )
+
     def play_from_start(self) -> None:
         if self._sound is None:
             return
         # Cancel any in-flight fade before restarting.
         self._sound.stop()
         self._sound.set_volume(self._volume)
-        self._sound.play()
-        LOGGER.debug("Audio started from start")
+        maxtime = 0
+        if 0 < self._max_duration_s < self._duration_s:
+            maxtime = int(self._max_duration_s * 1000)
+        self._sound.play(maxtime=maxtime)
+        LOGGER.debug("Audio started from start (maxtime=%dms)", maxtime)
 
     def fade_out(self, ms: int) -> None:
         if self._sound is None:
