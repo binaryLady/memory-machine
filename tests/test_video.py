@@ -273,3 +273,31 @@ def test_scaling_is_skipped_when_the_window_size_is_unknown(
 
     assert engine._scale(frame) is frame
     assert engine._output_rect() is None
+
+
+def test_rewind_duration_at_native_rate(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+
+    engine.set_audio_duration(180.0)
+
+    # 100 frames at 30fps, one frame per interval.
+    # Not pytest.approx: these tests stub out numpy, which approx introspects.
+    assert abs(engine.rewind_duration_s - 100 / 30.0) < 1e-9
+
+
+def test_rewind_duration_matches_audio_when_fitted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse, reverse_rate="fit_to_audio")
+
+    engine.set_audio_duration(180.0)
+
+    assert abs(engine.rewind_duration_s - 180.0) < 1e-9
+
+
+def test_rewind_duration_is_zero_without_a_clip(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = make_engine(monkeypatch, "/nonexistent/piece.mp4")
+
+    assert engine.rewind_duration_s == 0.0

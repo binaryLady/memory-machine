@@ -89,6 +89,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         video.set_idle_mode("loop_forward")
     status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
+    audio.set_max_duration(video.rewind_duration_s)
     video.set_mode("IDLE")
     telemetry.start()
 

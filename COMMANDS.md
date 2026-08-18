@@ -526,6 +526,17 @@ too wide. Check what the engine is working with:
 grep -E "Video loaded|Output surface" ~/.local/state/motion-player/motion-player.log | tail -2
 ```
 
+**The audio keeps playing after the picture stops.** It no longer can — playback
+is capped to the length of the rewind, and `on_rewind_end = hold` fades the sound
+out with the picture. If the audio is much longer than the footage you are
+throwing most of it away, which may not be the intent; `reverse_rate =
+fit_to_audio` stretches the rewind across the whole audio instead. Compare the
+two durations:
+
+```bash
+grep -E "Audio loaded|Video loaded|playback will stop" ~/.local/state/motion-player/motion-player.log | tail -3
+```
+
 **No audio.** Confirm the mixer opened and which sink it picked:
 
 ```bash
