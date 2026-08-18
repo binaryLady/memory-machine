@@ -1,11 +1,18 @@
 [Unit]
 Description=memory-machine gallery installation
 After=graphical-session.target
+# Stop flapping after repeated failures so the unit lands in 'failed' where
+# motion-player-status and the journal will show it, instead of restarting
+# silently forever.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/motion-player
-Restart=always
+# The launcher waits for a display itself, and a deliberate quit (q or Esc)
+# exits cleanly, so only actual failures should bring it back.
+Restart=on-failure
 RestartSec=5
 
 [Install]

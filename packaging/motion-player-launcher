@@ -80,8 +80,12 @@ cd "$APP_DIR" || exit 1
 LOCK="$STATE_DIR/instance.lock"
 exec 9>"$LOCK"
 if ! flock -n 9; then
-    echo "$APP_NAME is already running." >&2
-    exit 0
+    # Exit non-zero: under Restart=always a zero exit here looks like a clean
+    # run, and systemd restarts into the same collision forever in silence.
+    MSG="$APP_NAME is already running; another process holds $LOCK. Not starting a second copy."
+    echo "$MSG" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $MSG" >> "$LOG"
+    exit 3
 fi
 
 # Hide cursor; ignore if unclutter is not installed.
