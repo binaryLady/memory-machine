@@ -94,6 +94,10 @@ motion-player-toggle --start
 
 The piece needs three files in `~/memory-machine-media/`:
 
+If no sensor is fitted at all, set `sensor_type = none` in the config. The piece
+then loops forward continuously and never rewinds — no sensor, no audio, no
+reverse, just the footage playing.
+
 | File | What it is |
 | --- | --- |
 | `piece.mp4` | the footage, played forward |
@@ -469,9 +473,22 @@ unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
 
 **Lifting the headphones does nothing, and the log says `BadPinFactory`.**
-gpiozero could not load a GPIO backend, so there is no sensor. The piece still
-plays and falls back to the keyboard backend, so `space` triggers it by hand
-while you sort the hardware out. Check which backend gpiozero finds:
+gpiozero could not load a GPIO backend, so there is no sensor. The piece keeps
+running: it loops forward instead of holding a still frame, and `space` still
+triggers a rewind by hand while you sort the hardware out. A still frame would
+read as a broken installation to a visitor; a loop does not.
+
+Reproduce the failure in the same environment the service runs in, which is not
+the same as your shell:
+
+```bash
+systemd-run --user --pipe --wait python3 -c "from gpiozero import Device; Device.ensure_pin_factory(); print(Device.pin_factory)"
+```
+
+```bash
+id -nG; ls -l /dev/gpiochip*
+```
+ Check which backend gpiozero finds:
 
 ```bash
 python3 -c "from gpiozero import Device; Device.ensure_pin_factory(); print(Device.pin_factory)"

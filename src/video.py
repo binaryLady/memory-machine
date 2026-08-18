@@ -41,6 +41,7 @@ class VideoEngine:
         self._height = 0
         self._current_index = 0.0
         self._mode = "IDLE"
+        self._idle_mode = str(self._config.idle_mode)
         self._interval = 1.0 / self._fps
         self._next_deadline = 0.0
         self._audio_duration = 0.0
@@ -130,6 +131,15 @@ class VideoEngine:
                 pass
         self._cv2.setMouseCallback(self._title, lambda *args: None)
 
+    def set_idle_mode(self, mode: str) -> None:
+        """Override the configured idle behaviour for this run."""
+        if mode == self._idle_mode:
+            return
+        LOGGER.info("Idle mode -> %s (was %s)", mode, self._idle_mode)
+        self._idle_mode = mode
+        if self._mode == "IDLE":
+            self.set_mode("IDLE")
+
     def set_audio_duration(self, duration_s: float) -> None:
         """Tell the video engine how long the audio is, used for fit_to_audio."""
         self._audio_duration = duration_s
@@ -168,12 +178,12 @@ class VideoEngine:
             self._next_deadline = time.monotonic() + self._interval
             self._rewind(self._cap)
         elif mode == "IDLE":
-            if self._config.idle_mode == "hold_first_frame":
+            if self._idle_mode == "hold_first_frame":
                 self._current_index = 0.0
                 self._show(self._first_frame)
-            elif self._config.idle_mode == "black":
+            elif self._idle_mode == "black":
                 self._render_black()
-            elif self._config.idle_mode == "loop_forward":
+            elif self._idle_mode == "loop_forward":
                 self._current_index = 0.0
                 self._next_deadline = time.monotonic() + self._interval
                 self._rewind(self._cap)
@@ -245,16 +255,16 @@ class VideoEngine:
             self._next_deadline = now + self._interval
 
         if self._mode == "IDLE":
-            if self._config.idle_mode == "loop_forward":
+            if self._idle_mode == "loop_forward":
                 self._current_index += 1
                 if self._current_index >= self._frame_count:
                     self._current_index = 0.0
                     self._rewind(self._cap)
                 self._advance_to(self._cap, int(self._current_index))
                 self._show(self._last_frame)
-            elif self._config.idle_mode == "hold_first_frame":
+            elif self._idle_mode == "hold_first_frame":
                 self._show(self._first_frame)
-            elif self._config.idle_mode == "black":
+            elif self._idle_mode == "black":
                 self._render_black()
             return
 

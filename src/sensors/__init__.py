@@ -9,6 +9,7 @@ from typing import Any
 from .base import Sensor, SensorConfig
 from .digital import DigitalSensor
 from .keyboard import KeyboardSensor
+from .null import NullSensor
 
 LOGGER = logging.getLogger("motion-player.sensor")
 
@@ -30,6 +31,8 @@ def _make_single(sensor_type: str, config: Any) -> Sensor:
         return MmwaveSensor(config)
     if sensor_type == "keyboard":
         return KeyboardSensor()
+    if sensor_type == "none":
+        return NullSensor()
     raise ValueError(f"unknown sensor_type: {sensor_type}")
 
 
@@ -142,9 +145,11 @@ def make_sensor(config: Any) -> Sensor:
     """Create the configured sensor backend, falling back to keyboard on failure."""
     raw_types = [t.strip() for t in config.sensor_type.split("+")]
 
-    # Special-case the keyboard-only path so it is always available.
+    # Special-case the backends that need no hardware, so they always work.
     if raw_types == ["keyboard"]:
         return KeyboardSensor()
+    if raw_types == ["none"]:
+        return NullSensor()
 
     members: list[Sensor] = []
     for sensor_type in raw_types:

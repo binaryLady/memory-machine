@@ -157,7 +157,7 @@ on_audio_end        = silence          ; silence | loop
 [sensor]
 sensor_type         = switch           ; switch | reed | beam | reflective |
                                        ; capacitive | distance | hall | pir |
-                                       ; mmwave | gpio_raw | keyboard
+                                       ; mmwave | gpio_raw | keyboard | none
                                        ; or fused: switch+beam
 sensor_combine      = any              ; any | all
 engaged_when        = open             ; open | closed
@@ -215,6 +215,7 @@ restart_on_crash    = true
 | `mmwave`     | Presence module                | Uses the same `gpio_pin` as a digital presence line. |
 | `gpio_raw`   | Bare digital pin               | Escape hatch.                                        |
 | `keyboard`   | Spacebar                       | Laptop dev/test only.                                |
+| `none`       | Nothing fitted                 | The piece loops forward and never rewinds.           |
 
 Fuse sensors with `sensor_type = switch+beam` and `sensor_combine = any` (OR,
 survives one dying) or `all` (AND, kills false triggers).
