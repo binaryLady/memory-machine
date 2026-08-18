@@ -41,6 +41,8 @@ class VideoEngine:
         self._config = config.playback
         self._video_path = Path(config.media.video_file)
         self._reverse_path = Path(config.media.reverse_file)
+        self._portrait_video = config.media.portrait_video_file
+        self._portrait_reverse = config.media.portrait_reverse_file
         self._title = "memory-machine"
         self._cap: Any = None
         self._reverse_cap: Any = None
@@ -76,8 +78,40 @@ class VideoEngine:
         self._timing_late = 0
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
+        self._select_variant()
         self._load()
         self._create_window()
+
+    def _select_variant(self) -> None:
+        """Use the portrait cut when the screen is taller than it is wide.
+
+        This runs before the window exists, so the screen size comes from the
+        pinned mode or the sink itself rather than from the window.
+        """
+        if self._portrait_video is None or self._portrait_reverse is None:
+            return
+
+        size = display.output_resolution(self._config.display, self._config.display_mode)
+        if size is None:
+            LOGGER.info("Screen size unknown; using the default cut of the piece")
+            return
+
+        width, height = size
+        if height <= width:
+            LOGGER.info("Screen is %dx%d; using the default cut of the piece", width, height)
+            return
+
+        missing = [p for p in (self._portrait_video, self._portrait_reverse) if not p.exists()]
+        if missing:
+            LOGGER.error(
+                "Screen is portrait but %s is missing; using the default cut",
+                ", ".join(str(p) for p in missing),
+            )
+            return
+
+        LOGGER.info("Screen is %dx%d (portrait); using %s", width, height, self._portrait_video)
+        self._video_path = Path(self._portrait_video)
+        self._reverse_path = Path(self._portrait_reverse)
 
     def _open(self, path: Path, label: str) -> Any:
         if not path.exists():
