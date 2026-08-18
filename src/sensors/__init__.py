@@ -62,8 +62,20 @@ class FusedSensor(Sensor):
 
     def start(self, events: queue.Queue[Any]) -> None:
         self._events = events
+        started: list[Sensor] = []
         for member in self._members:
-            member.start(self._member_events)
+            try:
+                member.start(self._member_events)
+                started.append(member)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.error(
+                    "Sensor backend %s failed to start: %s; continuing without it",
+                    member.name,
+                    exc,
+                )
+        if not started:
+            raise RuntimeError(f"no backend of {self._name} could start")
+        self._members = started
         self._lifted = self.is_lifted()
         self._stop_event.clear()
         self._pump_thread = threading.Thread(target=self._pump_loop, daemon=True)
@@ -155,3 +167,27 @@ def make_sensor(config: Any) -> Sensor:
         return members[0]
 
     return FusedSensor(members, config.sensor_combine, config.engaged_when)
+
+
+def start_sensor(sensor: Sensor, events: queue.Queue[Any]) -> Sensor:
+    """Start a sensor, degrading to the keyboard backend if the hardware fails.
+
+    Digital backends only touch gpiozero in _start(), so a missing pin factory
+    or a permissions problem surfaces here rather than at construction, well
+    past make_sensor's fallback. Losing the sensor should leave the piece idling
+    and triggerable by hand, not take the installation down.
+    """
+    try:
+        sensor.start(events)
+        return sensor
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.error(
+            "Sensor %s could not start: %s. Falling back to the keyboard backend; "
+            "the piece will idle until a key is pressed.",
+            sensor.name,
+            exc,
+        )
+
+    fallback = KeyboardSensor()
+    fallback.start(events)
+    return fallback

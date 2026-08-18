@@ -167,3 +167,59 @@ def test_a_second_instance_exits_with_a_distinct_status(tmp_path) -> None:
     finally:
         fcntl.flock(held, fcntl.LOCK_UN)
         os.close(held)
+
+
+class ExplodingSensor(Sensor):
+    """A backend that constructs fine and only fails when started."""
+
+    def __init__(self) -> None:
+        super().__init__("exploding", SensorConfig(engaged_when="open"))
+
+    def _start(self) -> None:
+        raise RuntimeError("Unable to load any default pin factory!")
+
+    def _stop(self) -> None:
+        pass
+
+    def is_engaged(self) -> bool:
+        return False
+
+
+def test_a_sensor_that_fails_to_start_degrades_to_keyboard() -> None:
+    """gpiozero only fails in _start(), well past make_sensor's fallback."""
+    from sensors import start_sensor
+
+    events: queue.Queue = queue.Queue()
+
+    started = start_sensor(ExplodingSensor(), events)
+
+    assert isinstance(started, KeyboardSensor)
+    started.handle_key(ord(" "))
+    assert started.is_engaged(), "the fallback must be started, not merely returned"
+
+
+def test_a_working_sensor_is_returned_unchanged() -> None:
+    from sensors import start_sensor
+
+    events: queue.Queue = queue.Queue()
+    sensor = KeyboardSensor()
+
+    assert start_sensor(sensor, events) is sensor
+
+
+def test_fused_sensor_drops_members_that_cannot_start() -> None:
+    events: queue.Queue = queue.Queue()
+    working = KeyboardSensor()
+    fused = FusedSensor([ExplodingSensor(), working], "any", "open")
+
+    fused.start(events)
+
+    assert fused._members == [working]
+
+
+def test_fused_sensor_raises_when_no_member_starts() -> None:
+    events: queue.Queue = queue.Queue()
+    fused = FusedSensor([ExplodingSensor(), ExplodingSensor()], "any", "open")
+
+    with pytest.raises(RuntimeError):
+        fused.start(events)

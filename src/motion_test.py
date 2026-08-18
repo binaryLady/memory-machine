@@ -17,7 +17,7 @@ import config
 import logging_setup
 import status as status_module
 from audio import AudioEngine
-from sensors import make_sensor
+from sensors import make_sensor, start_sensor
 from state import StateMachine
 from telemetry import Telemetry
 from video import VideoEngine
@@ -72,7 +72,12 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int) -> int:
     events: queue.Queue = queue.Queue()
-    sensor.start(events)
+    started = start_sensor(sensor, events)
+    if started is not sensor:
+        status.set_last_error(
+            f"Sensor {sensor.name} could not start; running on the keyboard backend"
+        )
+    sensor = started
     status.set_sensor(sensor)
     status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
