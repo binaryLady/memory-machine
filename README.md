@@ -74,7 +74,21 @@ desktop shortcut **memory-machine-media** points to:
 ```
 ~/memory-machine-media/piece.mp4
 ~/memory-machine-media/piece.wav
+~/memory-machine-media/piece.reverse.mp4
 ```
+
+`piece.reverse.mp4` is a pre-rendered reverse of `piece.mp4`. Build it once,
+whenever the footage changes:
+
+```bash
+motion-player-reverse
+```
+
+The rewind plays that file forward, so playback stays sequential and never
+seeks. Seeking per frame forces the H.264 decoder back to the preceding
+keyframe every time, which is what limited the old engine to small clips; with
+the pre-reversed file, 1080p runs comfortably on a Pi. Encoding is CPU-heavy —
+run it on a laptop and copy the result over if the Pi is slow.
 
 The installer creates that folder and a desktop shortcut, so you can drag and
 drop files without using a terminal. You can also right-click the
@@ -103,8 +117,8 @@ script prints a friendly message instead of failing.
 ```
 
 This shows uptime, systemd restart count, current state, sensor reading, lift
-and accepted/rejected transition counts, resolved audio sink, whether frames
-were preloaded, and the last error.
+and accepted/rejected transition counts, resolved audio sink, and the last
+error.
 
 ## Config reference
 
@@ -116,12 +130,12 @@ keys are warned and ignored; missing keys fall back to the default below.
 [media]
 video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
 audio_file          = piece.wav
+reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
 
 [playback]
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
 reverse_rate        = native           ; native | fit_to_audio | <float>
 on_rewind_end       = hold             ; hold | loop_reverse | resume_forward
-preload_frames      = auto             ; auto | true | false
 fullscreen          = true
 display             = auto             ; auto | X11/Wayland display name
 
@@ -239,7 +253,7 @@ The engine POSTs JSON batches containing:
 - **Events:** every accepted `lift` and `replace`, with timestamp, source sensor,
   and current state.
 - **Heartbeats:** every `interval_s` with uptime, current state, raw sensor
-  reading, lift/accepted/rejected counts, resolved audio sink, preload status,
+  reading, lift/accepted/rejected counts, resolved audio sink,
   last error, and a tail of the local log (`log_tail_lines`).
 
 Telemetry runs on a background thread and never blocks the main loop. Invalid

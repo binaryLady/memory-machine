@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# motion-player-reverse: build the pre-reversed companion clip for the piece.
+#
+# The engine plays this file forward during the rewind, which keeps decoding
+# sequential. ffmpeg's reverse filter buffers its whole input in RAM, and a
+# full-length 1080p or 4K piece will not fit, so segment the source, reverse
+# each part, and concatenate the parts back to front.
+set -euo pipefail
+
+MEDIA_DIR="${MEDIA_DIR:-$HOME/memory-machine-media}"
+SRC="${1:-$MEDIA_DIR/piece.mp4}"
+DST="${2:-${SRC%.*}.reverse.mp4}"
+SEGMENT_SECONDS="${SEGMENT_SECONDS:-10}"
+CRF="${CRF:-18}"
+PRESET="${PRESET:-medium}"
+
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "ffmpeg is not installed. Run: sudo apt install -y ffmpeg" >&2
+    exit 1
+fi
+
+if [ ! -f "$SRC" ]; then
+    echo "Source clip not found: $SRC" >&2
+    exit 1
+fi
+
+if [ "$SRC" = "$DST" ]; then
+    echo "Refusing to overwrite the source clip" >&2
+    exit 1
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+echo "Segmenting $SRC into ~${SEGMENT_SECONDS}s parts..."
+ffmpeg -nostdin -v error -y -i "$SRC" -an -c:v copy \
+    -f segment -segment_time "$SEGMENT_SECONDS" -reset_timestamps 1 \
+    "$WORK/seg%05d.mp4"
+
+for seg in "$WORK"/seg*.mp4; do
+    echo "Reversing $(basename "$seg")..."
+    ffmpeg -nostdin -v error -y -i "$seg" -an -vf reverse \
+        -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p \
+        "$WORK/rev_$(basename "$seg")"
+done
+
+LIST="$WORK/concat.txt"
+: > "$LIST"
+while IFS= read -r rev; do
+    printf "file '%s'\n" "$rev" >> "$LIST"
+done < <(printf '%s\n' "$WORK"/rev_seg*.mp4 | sort -r)
+
+echo "Concatenating into $DST..."
+ffmpeg -nostdin -v error -y -f concat -safe 0 -i "$LIST" -c:v copy "$DST"
+
+frame_count() {
+    ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames \
+        -of default=nokey=1:noprint_wrappers=1 "$1" 2>/dev/null || echo "?"
+}
+
+SRC_FRAMES="$(frame_count "$SRC")"
+DST_FRAMES="$(frame_count "$DST")"
+echo "Done: $DST"
+echo "Frames: source=$SRC_FRAMES reversed=$DST_FRAMES"
+if [ "$SRC_FRAMES" != "$DST_FRAMES" ] && [ "$SRC_FRAMES" != "?" ] && [ "$DST_FRAMES" != "?" ]; then
+    echo "Note: frame counts differ; the rewind will be marginally shorter or longer." >&2
+fi

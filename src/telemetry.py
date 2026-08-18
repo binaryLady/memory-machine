@@ -25,7 +25,6 @@ class _HeartbeatData:
     accepted_count: int
     rejected_count: int
     audio_sink: str
-    frames_preloaded: bool
     last_error: str
 
 
@@ -112,7 +111,6 @@ class Telemetry:
             accepted_count=int(snapshot.get("accepted_count", 0)),
             rejected_count=int(snapshot.get("rejected_count", 0)),
             audio_sink=snapshot.get("audio_sink", "unknown"),
-            frames_preloaded=bool(snapshot.get("frames_preloaded", False)),
             last_error=snapshot.get("last_error", ""),
         )
         raw = False
@@ -134,7 +132,6 @@ class Telemetry:
             accepted_count=data.accepted_count,
             rejected_count=data.rejected_count,
             audio_sink=data.audio_sink,
-            frames_preloaded=data.frames_preloaded,
             last_error=data.last_error,
             log_tail=self._read_log_tail(),
         )

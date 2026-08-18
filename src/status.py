@@ -35,7 +35,6 @@ class Status:
     accepted_count: int = 0
     rejected_count: int = 0
     audio_sink: str = "unknown"
-    frames_preloaded: bool = False
     last_error: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -51,7 +50,6 @@ class Status:
             "accepted_count": self.accepted_count,
             "rejected_count": self.rejected_count,
             "audio_sink": self.audio_sink,
-            "frames_preloaded": self.frames_preloaded,
             "last_error": self.last_error,
             **self.extra,
         }
@@ -91,9 +89,6 @@ class StatusWriter:
 
     def set_audio_sink(self, sink: str) -> None:
         self._status.audio_sink = sink
-
-    def set_frames_preloaded(self, preloaded: bool) -> None:
-        self._status.frames_preloaded = preloaded
 
     def set_last_error(self, message: str) -> None:
         self._status.last_error = message
@@ -143,7 +138,6 @@ def _print_status(status: Status, json_mode: bool) -> None:
     print(f"Lift count:        {status.lift_count}")
     print(f"Accepted/Rejected: {status.accepted_count}/{status.rejected_count}")
     print(f"Audio sink:        {status.audio_sink}")
-    print(f"Frames preloaded:  {status.frames_preloaded}")
     print(f"Last error:        {status.last_error or '(none)'}")
 
 

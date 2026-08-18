@@ -1,8 +1,7 @@
-"""OpenCV video engine with reverse/forward playback."""
+"""OpenCV video engine with sequential forward and pre-reversed playback."""
 from __future__ import annotations
 
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,12 @@ LOGGER = logging.getLogger("motion-player.video")
 
 
 class VideoEngine:
-    """Loads a clip and renders frames on the main thread."""
+    """Streams frames from the piece and from a pre-reversed copy of it.
+
+    The rewind plays the pre-reversed clip forward, so no mode ever seeks per
+    frame. Random seeks force an H.264 decoder back to the preceding keyframe,
+    which is what puts high-resolution sources out of reach on a Pi.
+    """
 
     def __init__(self, config: Any) -> None:
         import cv2  # type: ignore[import-untyped]
@@ -26,9 +30,10 @@ class VideoEngine:
         self._np = np
         self._config = config.playback
         self._video_path = Path(config.media.video_file)
+        self._reverse_path = Path(config.media.reverse_file)
         self._title = "memory-machine"
         self._cap: Any = None
-        self._frames: list[Any] | None = None
+        self._reverse_cap: Any = None
         self._frame_count = 0
         self._fps = 30.0
         self._width = 0
@@ -37,30 +42,31 @@ class VideoEngine:
         self._mode = "IDLE"
         self._interval = 1.0 / self._fps
         self._next_deadline = 0.0
-        self._epoch = 0.0
-        self._preload = False
         self._audio_duration = 0.0
         self._reverse_step = 1.0
+        self._first_frame: Any = None
+        self._last_frame: Any = None
+        # Frames consumed from whichever capture the current mode reads. Reset
+        # by _rewind() on every mode entry, so the two captures never share it.
+        self._stream_pos = 0
         self._black_frame: Any = None
 
         self._load()
         self._create_window()
 
-    def _total_memory_bytes(self) -> int:
-        try:
-            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
-        except (AttributeError, ValueError):
-            return 4 * 1024**3  # fallback 4 GB
+    def _open(self, path: Path, label: str) -> Any:
+        if not path.exists():
+            LOGGER.error("%s not found: %s", label, path)
+            return None
+        cap = self._cv2.VideoCapture(str(path))
+        if not cap.isOpened():
+            LOGGER.error("Could not open %s: %s", label, path)
+            return None
+        return cap
 
     def _load(self) -> None:
-        if not self._video_path.exists():
-            LOGGER.error("Video file not found: %s", self._video_path)
-            self._mode = "BLACK"
-            return
-
-        self._cap = self._cv2.VideoCapture(str(self._video_path))
-        if not self._cap.isOpened():
-            LOGGER.error("Could not open video file: %s", self._video_path)
+        self._cap = self._open(self._video_path, "Video file")
+        if self._cap is None:
             self._mode = "BLACK"
             return
 
@@ -75,60 +81,34 @@ class VideoEngine:
 
         self._interval = 1.0 / self._fps
         self._current_index = 0.0
-        self._epoch = time.monotonic()
-        self._next_deadline = self._epoch + self._interval
+        self._next_deadline = time.monotonic() + self._interval
 
-        self._maybe_preload()
+        ok, frame = self._cap.read()
+        if ok:
+            self._first_frame = frame
+            self._last_frame = frame
+        self._stream_pos = 1
+
+        self._reverse_cap = self._open(self._reverse_path, "Reverse clip")
+        if self._reverse_cap is not None:
+            reverse_count = int(self._reverse_cap.get(self._cv2.CAP_PROP_FRAME_COUNT))
+            if abs(reverse_count - self._frame_count) > 1:
+                LOGGER.warning(
+                    "Reverse clip has %d frames but the piece has %d; regenerate it "
+                    "with motion-player-reverse so the rewind matches",
+                    reverse_count,
+                    self._frame_count,
+                )
 
         LOGGER.info(
-            "Video loaded: %s frames=%s fps=%.2f size=%dx%d preload=%s",
+            "Video loaded: %s frames=%s fps=%.2f size=%dx%d reverse=%s",
             self._video_path,
             self._frame_count,
             self._fps,
             self._width,
             self._height,
-            self._preload,
+            self._reverse_cap is not None,
         )
-
-    def _maybe_preload(self) -> None:
-        want = self._config.preload_frames.lower()
-        if want == "false":
-            self._preload = False
-            LOGGER.info("Frame preloading disabled by config")
-            return
-
-        # Rough memory estimate: BGR frame = width * height * 3 bytes.
-        estimated = self._frame_count * self._width * self._height * 3
-        total = self._total_memory_bytes()
-        threshold = total * 0.40
-
-        if want == "auto" and estimated > threshold:
-            LOGGER.warning(
-                "Estimated preload size %.1f MB exceeds 40%% of RAM (%.1f MB); falling back to seeking",
-                estimated / (1024 * 1024),
-                threshold / (1024 * 1024),
-            )
-            self._preload = False
-            return
-
-        frames: list[Any] = []
-        while True:
-            ok, frame = self._cap.read()
-            if not ok:
-                break
-            frames.append(frame)
-        if len(frames) < self._frame_count:
-            LOGGER.warning(
-                "Only decoded %d/%d frames; playback may stutter", len(frames), self._frame_count
-            )
-        if frames:
-            self._frames = frames
-            self._preload = True
-            LOGGER.info(
-                "Preloaded %d frames (%.1f MB)", len(frames), estimated / (1024 * 1024)
-            )
-        else:
-            self._preload = False
 
     def _create_window(self) -> None:
         self._cv2.namedWindow(self._title, self._cv2.WINDOW_NORMAL)
@@ -172,39 +152,54 @@ class VideoEngine:
         self._mode = mode
 
         if mode == "REVERSE":
-            self._current_index = float(self._frame_count - 1)
+            self._current_index = float(max(self._frame_count - 1, 0))
             self._compute_reverse_step()
             self._next_deadline = time.monotonic() + self._interval
-            self._render_frame_at(int(self._current_index))
+            if self._reverse_cap is None:
+                self._render_black()
+                return
+            self._rewind(self._reverse_cap)
+            self._advance_to(self._reverse_cap, 0)
+            self._show(self._last_frame)
         elif mode == "FORWARD":
             self._current_index = 0.0
             self._next_deadline = time.monotonic() + self._interval
+            self._rewind(self._cap)
         elif mode == "IDLE":
             if self._config.idle_mode == "hold_first_frame":
                 self._current_index = 0.0
-                self._render_frame_at(0)
+                self._show(self._first_frame)
             elif self._config.idle_mode == "black":
                 self._render_black()
             elif self._config.idle_mode == "loop_forward":
                 self._current_index = 0.0
                 self._next_deadline = time.monotonic() + self._interval
+                self._rewind(self._cap)
 
-    def _frame_at(self, index: int) -> Any:
-        if self._frames is not None:
-            return self._frames[index]
-        if self._cap is None:
-            return None
-        self._cap.set(self._cv2.CAP_PROP_POS_FRAMES, index)
-        ok, frame = self._cap.read()
-        if not ok:
-            return self._black_frame
-        return frame
-
-    def _render_frame_at(self, index: int) -> None:
-        if self._mode == "BLACK":
-            self._render_black()
+    def _rewind(self, cap: Any) -> None:
+        """Seek one capture back to its first frame. Once per mode entry."""
+        if cap is None:
             return
-        frame = self._frame_at(index)
+        cap.set(self._cv2.CAP_PROP_POS_FRAMES, 0)
+        self._stream_pos = 0
+
+    def _advance_to(self, cap: Any, target: int) -> None:
+        """Read forward until _last_frame holds `target`, without ever seeking.
+
+        A reverse_step below 1.0 leaves the target where it already is, so the
+        held frame is simply shown again; a step above 1.0 decodes and discards
+        the frames in between, which is still far cheaper than a seek.
+        """
+        if cap is None:
+            return
+        while self._stream_pos <= target:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            self._last_frame = frame
+            self._stream_pos += 1
+
+    def _show(self, frame: Any) -> None:
         if frame is None:
             self._render_black()
             return
@@ -236,7 +231,7 @@ class VideoEngine:
         if now < self._next_deadline:
             return
 
-        # Advance to the next frame deadline based on the original epoch to
+        # Advance to the next frame deadline based on the previous one to
         # prevent drift over long runs.
         self._next_deadline += self._interval
         if self._next_deadline < now:
@@ -245,10 +240,14 @@ class VideoEngine:
 
         if self._mode == "IDLE":
             if self._config.idle_mode == "loop_forward":
-                self._current_index = (self._current_index + 1) % self._frame_count
-                self._render_frame_at(int(self._current_index))
+                self._current_index += 1
+                if self._current_index >= self._frame_count:
+                    self._current_index = 0.0
+                    self._rewind(self._cap)
+                self._advance_to(self._cap, int(self._current_index))
+                self._show(self._last_frame)
             elif self._config.idle_mode == "hold_first_frame":
-                self._render_frame_at(0)
+                self._show(self._first_frame)
             elif self._config.idle_mode == "black":
                 self._render_black()
             return
@@ -257,18 +256,28 @@ class VideoEngine:
             self._current_index -= self._reverse_step
             if self._current_index <= 0:
                 self._current_index = 0.0
-            self._render_frame_at(int(self._current_index))
+            if self._reverse_cap is None:
+                self._render_black()
+                return
+            # The reversed clip runs the other way, so walking the piece's
+            # timeline down means walking that clip's timeline up.
+            self._advance_to(self._reverse_cap, int((self._frame_count - 1) - self._current_index))
+            self._show(self._last_frame)
             return
 
         if self._mode == "FORWARD":
             self._current_index += 1
             if self._current_index >= self._frame_count:
                 self._current_index = 0.0
-            self._render_frame_at(int(self._current_index))
+                self._rewind(self._cap)
+            self._advance_to(self._cap, int(self._current_index))
+            self._show(self._last_frame)
             return
 
     def release(self) -> None:
         self._cv2.destroyAllWindows()
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+        for name in ("_cap", "_reverse_cap"):
+            cap = getattr(self, name)
+            if cap is not None:
+                cap.release()
+                setattr(self, name, None)
