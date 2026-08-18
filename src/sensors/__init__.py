@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import threading
 from typing import Any
 
 from .base import Sensor, SensorConfig
@@ -33,11 +34,15 @@ def _make_single(sensor_type: str, config: Any) -> Sensor:
 
 
 class FusedSensor(Sensor):
-    """Combines multiple sensor backends according to sensor_combine."""
+    """Combines multiple sensor backends according to sensor_combine.
+
+    Members debounce independently and publish onto a private queue. This class
+    re-evaluates the combined state on every member event and forwards a single
+    lift/replace only when that combined state actually flips, so "all" really
+    does require every member.
+    """
 
     def __init__(self, members: list[Sensor], combine: str, engaged_when: str) -> None:
-        # The base class is used only for name/contract; individual members
-        # own their own queues. This class aggregates instantaneous reads.
         super().__init__(
             "+".join(m.name for m in members),
             SensorConfig(
@@ -50,25 +55,72 @@ class FusedSensor(Sensor):
         self._members = members
         self._combine = combine
         self._events: queue.Queue[Any] | None = None
-        self._engaged = False
+        self._member_events: queue.Queue[Any] = queue.Queue()
+        self._pump_thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._lifted = False
 
     def start(self, events: queue.Queue[Any]) -> None:
         self._events = events
         for member in self._members:
-            member.start(events)
+            member.start(self._member_events)
+        self._lifted = self.is_lifted()
+        self._stop_event.clear()
+        self._pump_thread = threading.Thread(target=self._pump_loop, daemon=True)
+        self._pump_thread.start()
 
     def _start(self) -> None:
         pass
 
     def stop(self) -> None:
+        self._stop_event.set()
+        if self._pump_thread is not None:
+            self._pump_thread.join(timeout=1.0)
+            self._pump_thread = None
         for member in self._members:
             member.stop()
 
     def _stop(self) -> None:
         pass
 
+    def _pump_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                _event, timestamp, source = self._member_events.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            lifted = self.is_lifted()
+            if lifted == self._lifted:
+                LOGGER.info(
+                    "transition sensor=%s source=%s combine=%s accepted=false reason=combined_state_unchanged",
+                    self._name,
+                    source,
+                    self._combine,
+                )
+                continue
+
+            self._lifted = lifted
+            event = "lift" if lifted else "replace"
+            LOGGER.info(
+                "transition sensor=%s event=%s source=%s combine=%s accepted=true ts=%.3f",
+                self._name,
+                event,
+                source,
+                self._combine,
+                timestamp,
+            )
+            if self._events is not None:
+                self._events.put((event, timestamp, self._name))
+
     def is_engaged(self) -> bool:
         states = [m.is_engaged() for m in self._members]
+        if self._combine == "all":
+            return all(states)
+        return any(states)
+
+    def is_lifted(self) -> bool:
+        states = [m.is_lifted() for m in self._members]
         if self._combine == "all":
             return all(states)
         return any(states)

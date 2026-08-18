@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import queue
+import time
 from dataclasses import dataclass
 
 import pytest
 from sensors import FusedSensor, KeyboardSensor, make_sensor
+from sensors.base import Sensor, SensorConfig
 
 
 @dataclass(frozen=True)
@@ -48,3 +51,77 @@ def test_fused_all_returns_combined_sensor() -> None:
     cfg = FakeSensorConfig(sensor_type="keyboard+keyboard", sensor_combine="all")
     sensor = make_sensor(cfg)
     assert isinstance(sensor, FusedSensor)
+
+
+class FakeMember(Sensor):
+    """Member sensor whose raw state can be driven directly from a test."""
+
+    def __init__(self, name: str, engaged_when: str = "closed") -> None:
+        super().__init__(name, SensorConfig(
+            engaged_when=engaged_when, bounce_time_ms=0, min_lift_ms=1, min_replace_ms=1
+        ))
+        self._raw = False
+
+    def _start(self) -> None:
+        pass
+
+    def _stop(self) -> None:
+        pass
+
+    def is_engaged(self) -> bool:
+        return self._raw
+
+    def raw_change(self, raw: bool) -> None:
+        self._raw = raw
+        self._on_raw_change(raw)
+
+
+def drain(events: queue.Queue, timeout: float = 0.4) -> list:
+    deadline = time.monotonic() + timeout
+    collected = []
+    while time.monotonic() < deadline:
+        try:
+            collected.append(events.get(timeout=0.05))
+        except queue.Empty:
+            continue
+    return collected
+
+
+def test_combine_all_ignores_a_single_member_lift() -> None:
+    a, b = FakeMember("a"), FakeMember("b")
+    fused = FusedSensor([a, b], combine="all", engaged_when="closed")
+    events: queue.Queue = queue.Queue()
+    fused.start(events)
+
+    a.raw_change(True)
+
+    assert drain(events) == []
+    fused.stop()
+
+
+def test_combine_all_lifts_once_every_member_agrees() -> None:
+    a, b = FakeMember("a"), FakeMember("b")
+    fused = FusedSensor([a, b], combine="all", engaged_when="closed")
+    events: queue.Queue = queue.Queue()
+    fused.start(events)
+
+    a.raw_change(True)
+    b.raw_change(True)
+
+    got = drain(events)
+    assert [e[0] for e in got] == ["lift"]
+    fused.stop()
+
+
+def test_combine_any_lifts_on_the_first_member() -> None:
+    a, b = FakeMember("a"), FakeMember("b")
+    fused = FusedSensor([a, b], combine="any", engaged_when="closed")
+    events: queue.Queue = queue.Queue()
+    fused.start(events)
+
+    a.raw_change(True)
+    b.raw_change(True)  # already lifted; must not emit a second lift
+
+    got = drain(events)
+    assert [e[0] for e in got] == ["lift"]
+    fused.stop()
