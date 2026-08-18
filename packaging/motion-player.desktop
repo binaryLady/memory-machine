@@ -22,7 +22,7 @@ Exec=/usr/bin/motion-player-toggle --stop
 
 [Desktop Action OpenMediaFolder]
 Name=Open media folder
-Exec=sh -c 'xdg-open "$HOME/memory-machine-media"'
+Exec=/usr/bin/motion-player-media
 
 [Desktop Action Debug]
 Name=Run with visible log
