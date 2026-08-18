@@ -426,3 +426,65 @@ def test_a_missing_portrait_cut_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_
     )
 
     assert engine._video_path == clip
+
+
+def test_a_held_frame_is_not_redrawn(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """An idle installation must not rescale and re-upload the same frame all day."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+    import cv2
+
+    engine.set_mode("IDLE")
+    tick(engine)
+    after_first = len(cv2.shown)
+
+    for _ in range(30):
+        tick(engine)
+
+    assert len(cv2.shown) == after_first, "the same frame was uploaded repeatedly"
+
+
+def test_a_new_frame_is_always_drawn(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+    import cv2
+
+    engine.set_mode("REVERSE")
+    before = len(cv2.shown)
+
+    for _ in range(5):
+        tick(engine)
+
+    assert len(cv2.shown) == before + 5
+
+
+def test_a_mode_change_forces_a_redraw(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Skipping redraws must not leave a stale frame on screen after a change."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+    import cv2
+
+    engine.set_mode("IDLE")
+    tick(engine)
+    before = len(cv2.shown)
+
+    engine.set_mode("IDLE")
+
+    assert len(cv2.shown) == before + 1
+
+
+def test_a_slow_rewind_does_not_redraw_repeated_frames(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+    import cv2
+
+    engine.set_mode("REVERSE")
+    engine._reverse_step = 0.5
+    before = len(cv2.shown)
+
+    for _ in range(8):
+        tick(engine)
+
+    assert len(cv2.shown) - before == 4, "only distinct frames should be uploaded"

@@ -103,6 +103,22 @@ If you use different file names, edit `/etc/motion-player/config.ini` to point
 elsewhere. The package does not ship media; the app logs a clear "media missing"
 reason and shows a black screen if the files are absent.
 
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `motion-player-toggle` | start/stop the piece (`--start`, `--stop`) |
+| `motion-player-status` | runtime state and resolved config (`--json`) |
+| `motion-player-update` | fetch, rebuild, reinstall, restart, roll back on failure |
+| `motion-player-prepare` | render the piece at the screen's resolution, plus its reverse |
+| `motion-player-reverse` | build the pre-rendered reverse clip |
+| `motion-player-display` | pin the HDMI output mode, stop screen blanking |
+| `motion-player-media` | open the media folder |
+| `motion-player` | the engine itself (`--check-config`, `--verbose`, `--log`) |
+
+[COMMANDS.md](COMMANDS.md) is the full operator reference: getting started,
+media, multiple screens, testing without the sensor, and troubleshooting.
+
 ## Update from the Pi
 
 ```bash
