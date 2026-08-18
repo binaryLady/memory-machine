@@ -212,6 +212,47 @@ engine loads it unchanged.
 
 ---
 
+## A DSI panel
+
+A ribbon-connected panel (DSI) is a display like any other, but it appears as
+`DSI-1` rather than `HDMI-A-1`, and it is not hot-pluggable — connect it with the
+Pi powered off.
+
+Check the Pi sees it after booting:
+
+```bash
+motion-player-display --show
+```
+
+A `DSI-1` line reading `connected` with a mode beside it means the kernel has
+the panel. If it is absent, the panel needs its device tree overlay in
+`/boot/firmware/config.txt` — which overlay depends on the panel, so use the
+line its manufacturer specifies — followed by a reboot:
+
+```bash
+dmesg | grep -iE "dsi|panel|drm" | tail -20
+```
+
+Then point the piece at it, using the panel's own resolution:
+
+```ini
+[playback]
+display             = DSI-1
+display_mode        = 800x480@60
+```
+
+```bash
+motion-player-prepare --size 800x480 --mode fill
+```
+
+With both HDMI and DSI connected the Pi drives two outputs, and the engine opens
+one fullscreen window on whichever the compositor treats as primary. `display`
+pins the mode on the named connector but does not choose which screen the window
+lands on — if it opens on the wrong one, disconnect the other, or set the panel
+as primary in the desktop's screen settings.
+
+---
+
 ## Multiple screens
 
 An HDMI splitter mirrors one signal, so the Pi renders a single framebuffer and

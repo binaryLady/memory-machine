@@ -51,10 +51,14 @@ if [ ! -f "$SRC" ]; then
 fi
 
 if [ -z "$SIZE" ]; then
-    for modes in /sys/class/drm/card*-HDMI-A-*/modes; do
+    # Any connected connector, so a DSI or DPI panel counts as the screen.
+    for status in /sys/class/drm/card*-*/status; do
+        [ "$(cat "$status" 2>/dev/null)" = "connected" ] || continue
+        modes="$(dirname "$status")/modes"
         [ -s "$modes" ] || continue
         SIZE="$(head -n1 "$modes")"
-        echo "Using the screen's reported mode: $SIZE"
+        CONN="$(basename "$(dirname "$status")")"
+        echo "Using ${CONN#*-}'s reported mode: $SIZE"
         break
     done
 fi
