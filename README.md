@@ -116,6 +116,9 @@ reason and shows a black screen if the files are absent.
 | `motion-player-media` | open the media folder |
 | `motion-player` | the engine itself (`--check-config`, `--verbose`, `--log`) |
 
+`motion-player-install-deb` is an internal helper for unattended updates and
+is not run by hand.
+
 [COMMANDS.md](COMMANDS.md) is the full operator reference: getting started,
 media, multiple screens, testing without the sensor, and troubleshooting.
 
