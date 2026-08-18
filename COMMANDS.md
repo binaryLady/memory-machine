@@ -5,6 +5,89 @@ on the Pi unless marked **(laptop)**.
 
 ---
 
+## Getting started
+
+First install on a fresh Pi. The bootstrap installs dependencies, builds and
+installs the `.deb`, enables linger, and starts the service:
+
+```bash
+git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+```
+
+```bash
+cd ~/memory-machine && ./scripts/bootstrap_pi.sh
+```
+
+Use `https://github.com/binaryLady/memory-machine.git` if this Pi has no deploy
+key set up.
+
+If the app was installed straight from a `.deb` there is no checkout, which is
+what makes `motion-player-update` refuse to run. Clone it, then build and
+install over the top — your `/etc/motion-player/config.ini` is a Debian
+conffile and survives:
+
+```bash
+git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+```
+
+```bash
+cd ~/memory-machine && sudo apt install -y dpkg-dev ffmpeg && make clean && make release
+```
+
+```bash
+sudo apt install -y --allow-downgrades ./motion-player_*.deb
+```
+
+`make clean` matters: old `.deb` files accumulate in the repo root, and the glob
+hands apt several candidates at once, which it resolves to "nothing to do".
+`--allow-downgrades` covers builds whose version string sorts below what is
+already installed.
+
+Either way, finish by putting the media in place and building the reversed
+clip — the engine treats it as required media and will report
+`Reverse clip missing` without it:
+
+```bash
+motion-player-reverse
+```
+
+```bash
+motion-player --verbose --check-config
+```
+
+Expect `Config OK`, then start it:
+
+```bash
+motion-player-toggle --start
+```
+
+---
+
+## Quick tips
+
+- **`--verbose` has to come first.** `motion-player --check-config` prints
+  nothing, because the launcher redirects output to the log unless `--verbose`
+  leads. Either put it first or call
+  `python3 /opt/motion-player/motion_test.py` directly.
+- **The log is the real output channel.** The engine writes almost nothing to a
+  terminal on its own: `tail -f ~/.local/state/motion-player/motion-player.log`.
+- **Stop the service before any foreground run.** The engine takes a
+  single-instance lock, so a second copy exits immediately.
+- **Keys go to the video window, not the terminal.** During a keyboard-sensor
+  test, click the window first or `space` does nothing.
+- **Rebuild `piece.reverse.mp4` whenever the footage changes.** A stale reverse
+  clip is logged as a frame-count mismatch at startup, and the rewind will be
+  the wrong length.
+- **Config lives at `/etc/motion-player/config.ini`**, root-owned — not under
+  `~/.config`.
+- **`motion-player-update` needs `~/memory-machine/.git`.** See Getting started
+  above if it reports "Not running from a git checkout".
+- **Never install with a bare `motion-player_*.deb` glob.** Stale builds in the
+  repo root make apt pick between candidates and silently do nothing —
+  `Installing: 0, Upgrading: 0`. Run `make clean` before `make release`.
+
+---
+
 ## Media
 
 The piece needs three files in `~/memory-machine-media/`:
