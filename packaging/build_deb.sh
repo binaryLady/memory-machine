@@ -171,6 +171,9 @@ chmod 0755 "$STAGE/usr/bin/motion-player-media"
 cp "$REPO_ROOT/packaging/motion-player-reverse" "$STAGE/usr/bin/motion-player-reverse"
 chmod 0755 "$STAGE/usr/bin/motion-player-reverse"
 
+cp "$REPO_ROOT/packaging/motion-player-display" "$STAGE/usr/bin/motion-player-display"
+chmod 0755 "$STAGE/usr/bin/motion-player-display"
+
 # ---------------------------------------------------------------------------
 # 6. systemd user service
 # ---------------------------------------------------------------------------

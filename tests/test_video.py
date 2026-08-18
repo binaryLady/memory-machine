@@ -81,6 +81,7 @@ class FakePlayback:
     on_rewind_end: str = "hold"
     fullscreen: bool = True
     display: str = "auto"
+    display_mode: str = "auto"
 
 
 @dataclass

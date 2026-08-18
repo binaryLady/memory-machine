@@ -31,6 +31,7 @@ lint:
 	bash -n packaging/motion-player-media
 	bash -n packaging/motion-player-reverse
 	bash -n packaging/motion-player-install-deb
+	bash -n packaging/motion-player-display
 	bash -n scripts/bootstrap_pi.sh
 	bash -n scripts/update.sh
 	bash -n scripts/status.sh

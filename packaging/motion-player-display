@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# motion-player-display: pin the HDMI output mode at boot, and stop blanking.
+#
+# The app re-pins the mode on every start, but that happens after the compositor
+# has already come up. Setting the kernel parameter too means the very first
+# frame after a cold boot is at the right resolution, and a screen switched off
+# at boot cannot change what the Pi negotiates.
+set -euo pipefail
+
+CMDLINE="${CMDLINE:-/boot/firmware/cmdline.txt}"
+[ -f "$CMDLINE" ] || CMDLINE=/boot/cmdline.txt
+
+usage() {
+    cat <<'USAGE'
+motion-player-display — pin the HDMI output mode at boot.
+
+  motion-player-display --show                     what is connected, and what is set
+  motion-player-display --set HDMI-A-1 1920x1080@60  pin that mode (needs sudo)
+  motion-player-display --revert                   remove the pinned mode (needs sudo)
+  motion-player-display --no-blank                 stop the screen blanking (needs sudo)
+
+A reboot is needed for --set and --revert to take effect.
+USAGE
+}
+
+show() {
+    echo "Connectors:"
+    for dir in /sys/class/drm/card*-*/status; do
+        [ -e "$dir" ] || continue
+        conn="${dir%/status}"
+        conn="$(basename "$conn")"
+        conn="${conn#*-}"
+        printf '  %-12s %s\n' "$conn" "$(cat "$dir")"
+    done
+    echo
+    echo "Preferred modes (first line is what the sink asks for):"
+    for modes in /sys/class/drm/card*-HDMI-A-*/modes; do
+        [ -s "$modes" ] || continue
+        conn="$(basename "$(dirname "$modes")")"
+        printf '  %-12s %s\n' "${conn#*-}" "$(head -n1 "$modes")"
+    done
+    echo
+    echo "Kernel parameter in $CMDLINE:"
+    if grep -qE '(^| )video=' "$CMDLINE"; then
+        tr ' ' '\n' < "$CMDLINE" | grep '^video=' | sed 's/^/  /'
+    else
+        echo "  (none set)"
+    fi
+}
+
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "This needs root. Rerun with sudo." >&2
+        exit 1
+    fi
+}
+
+write_cmdline() {
+    local new_line="$1"
+    [ -f "$CMDLINE.motion-player.bak" ] || cp -a "$CMDLINE" "$CMDLINE.motion-player.bak"
+    printf '%s\n' "$new_line" > "$CMDLINE.tmp"
+    mv "$CMDLINE.tmp" "$CMDLINE"
+}
+
+case "${1:---show}" in
+    --show)
+        show
+        ;;
+    --set)
+        CONN="${2:-}"
+        MODE="${3:-}"
+        if [ -z "$CONN" ] || [ -z "$MODE" ]; then
+            echo "Usage: motion-player-display --set HDMI-A-1 1920x1080@60" >&2
+            exit 2
+        fi
+        if ! printf '%s' "$MODE" | grep -qE '^[0-9]+x[0-9]+(@[0-9]+)?$'; then
+            echo "Mode must look like 1920x1080 or 1920x1080@60; got '$MODE'" >&2
+            exit 2
+        fi
+        require_root
+        LINE="$(tr -d '\n' < "$CMDLINE")"
+        # Drop any existing setting for this connector so repeat runs are safe.
+        LINE="$(printf '%s' "$LINE" | sed -E "s/[[:space:]]*video=${CONN}:[^[:space:]]*//g")"
+        write_cmdline "$LINE video=${CONN}:${MODE}D"
+        echo "Pinned $CONN to $MODE. Reboot for it to take effect."
+        echo "Backup of the original: $CMDLINE.motion-player.bak"
+        ;;
+    --revert)
+        require_root
+        LINE="$(tr -d '\n' < "$CMDLINE")"
+        LINE="$(printf '%s' "$LINE" | sed -E "s/[[:space:]]*video=[^[:space:]]*//g")"
+        write_cmdline "$LINE"
+        echo "Removed pinned display modes. Reboot for it to take effect."
+        ;;
+    --no-blank)
+        require_root
+        if command -v raspi-config >/dev/null 2>&1; then
+            raspi-config nonint do_blanking 1
+            echo "Screen blanking disabled."
+        else
+            echo "raspi-config not available; disable blanking in your compositor's settings." >&2
+            exit 1
+        fi
+        ;;
+    -h|--help)
+        usage
+        ;;
+    *)
+        echo "Unknown argument: $1" >&2
+        usage
+        exit 2
+        ;;
+esac
