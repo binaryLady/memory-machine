@@ -68,8 +68,8 @@ enables linger for your user, and starts the systemd user service.
 
 ## Media
 
-Place the real video and audio files in the **memory-machine-media** folder on
-the desktop:
+Place the real video and audio files in `~/memory-machine-media`, which the
+desktop shortcut **memory-machine-media** points to:
 
 ```
 ~/memory-machine-media/piece.mp4
@@ -114,7 +114,7 @@ keys are warned and ignored; missing keys fall back to the default below.
 
 ```ini
 [media]
-video_file          = piece.mp4        ; absolute or relative to /opt/motion-player/media/
+video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
 audio_file          = piece.wav
 
 [playback]
