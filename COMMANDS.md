@@ -141,25 +141,51 @@ the piece correctly, one downscaling and another upscaling. A 16:10, 4:3 or
 portrait panel will letterbox or stretch according to its own scaler, and the Pi
 cannot compensate per screen — there is only one signal.
 
-See what mode the splitter is currently advertising. Mixed-resolution sinks make
-splitters report either the lowest common mode or whatever they detected first,
-which can quietly drop the whole install to 720p:
+See what is connected and what mode each sink is asking for. Mixed-resolution
+sinks make splitters report either the lowest common mode or whatever they
+detected first, which can quietly drop the whole install to 720p:
 
 ```bash
-cat /sys/class/drm/card*-HDMI-A-1/modes | head -20
+motion-player-display --show
 ```
 
-Don't trust that negotiation. Force the mode on the single existing line in
-`/boot/firmware/cmdline.txt`:
+Don't trust that negotiation — pin the mode instead. Two layers do this, and you
+want both:
 
-```
-video=HDMI-A-1:1920x1080@60D
+**At boot**, as a kernel parameter, so the very first frame after a cold boot is
+already correct and a screen switched off at boot cannot change what the Pi
+negotiates:
+
+```bash
+sudo motion-player-display --set HDMI-A-1 1920x1080@60
 ```
 
-Use `HDMI-A-2` if the splitter is in the Pi's second port. The trailing `D`
-forces the mode even when EDID disagrees and keeps the connector alive when a
-screen is powered off — without it, switching a monitor off can blank or resize
-the piece mid-show.
+Use `HDMI-A-2` if the splitter is in the Pi's second port. This is idempotent,
+backs up `cmdline.txt` the first time, and needs a reboot. It appends
+`video=HDMI-A-1:1920x1080@60D` — the trailing `D` forces the mode even when EDID
+disagrees and keeps the connector alive when a screen is powered off. Undo with
+`sudo motion-player-display --revert`.
+
+**On every start**, from the app itself, so a screen that was off at boot and
+came back later cannot leave the output negotiated to something else. Set it in
+`/etc/motion-player/config.ini`:
+
+```ini
+[playback]
+display             = HDMI-A-1
+display_mode        = 1920x1080@60
+```
+
+The engine re-pins that mode each time it starts, before opening its window. If
+the mode is wrong, unavailable, or the tooling is missing, it logs the reason and
+plays anyway rather than failing — check which happened with
+`motion-player-status`, which reports the mode it settled on.
+
+While you are there, stop the screen blanking:
+
+```bash
+sudo motion-player-display --no-blank
+```
 
 Confirm what is actually going out after a reboot:
 

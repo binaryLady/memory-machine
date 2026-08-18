@@ -145,7 +145,8 @@ idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
 reverse_rate        = native           ; native | fit_to_audio | <float>
 on_rewind_end       = hold             ; hold | loop_reverse | resume_forward
 fullscreen          = true
-display             = auto             ; auto | X11/Wayland display name
+display             = auto             ; auto | HDMI-A-1 | HDMI-A-2
+display_mode        = auto             ; auto | 1920x1080@60, re-pinned each start
 
 [audio]
 audio_sink          = auto             ; ALSA/PipeWire device NAME

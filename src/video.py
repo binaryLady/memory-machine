@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import display
 from playback_math import compute_reverse_step
 
 LOGGER = logging.getLogger("motion-player.video")
@@ -51,6 +52,7 @@ class VideoEngine:
         self._stream_pos = 0
         self._black_frame: Any = None
 
+        self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._load()
         self._create_window()
 
@@ -217,6 +219,10 @@ class VideoEngine:
             self._cv2.imshow(self._title, self._black_frame)
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("cv2.imshow failed: %s", exc)
+
+    @property
+    def display_mode(self) -> str:
+        return self._display_mode
 
     @property
     def at_start(self) -> bool:

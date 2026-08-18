@@ -72,6 +72,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
     events: queue.Queue = queue.Queue()
     sensor.start(events)
     status.set_sensor(sensor)
+    status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
     video.set_mode("IDLE")
     telemetry.start()

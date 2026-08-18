@@ -7,6 +7,8 @@ import logging
 import os
 import re
 import urllib.parse
+
+import display
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -30,6 +32,7 @@ class PlaybackConfig:
     on_rewind_end: str
     fullscreen: bool
     display: str
+    display_mode: str
 
 
 @dataclass(frozen=True)
@@ -115,6 +118,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "on_rewind_end": "hold",
         "fullscreen": True,
         "display": "auto",
+        "display_mode": "auto",
     },
     "audio": {
         "audio_sink": "auto",
@@ -278,6 +282,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             on_rewind_end=str(playback_raw.get("on_rewind_end", DEFAULTS["playback"]["on_rewind_end"])),
             fullscreen=_parse_bool(playback_raw.get("fullscreen"), DEFAULTS["playback"]["fullscreen"]),
             display=str(playback_raw.get("display", DEFAULTS["playback"]["display"])),
+            display_mode=str(playback_raw.get("display_mode", DEFAULTS["playback"]["display_mode"])),
         ),
         audio=AudioConfig(
             audio_sink=str(audio_raw.get("audio_sink", DEFAULTS["audio"]["audio_sink"])),
@@ -356,6 +361,12 @@ def validate(config: Config) -> list[str]:
         problems.append(f"sensor.sensor_type contains unknown backends: {unknown}")
     if not types:
         problems.append("sensor.sensor_type is empty")
+
+    dm = config.playback.display_mode
+    if dm != "auto" and not display.is_valid_mode(dm):
+        problems.append(
+            f"playback.display_mode must be 'auto' or WIDTHxHEIGHT[@RATE]; got {dm!r}"
+        )
 
     rr = config.playback.reverse_rate
     if rr not in _VALID_REVERSE_RATE and not re.fullmatch(r"\d*\.?\d+", rr):
