@@ -20,7 +20,8 @@ You can also right-click the icon and choose **Start** or **Stop**.
 
 1. Right-click the **memory-machine** icon and choose **Stop**.
 2. Open the **memory-machine-media** shortcut on the desktop (or right-click the
-   **memory-machine** icon and choose **Open media folder**).
+   **memory-machine** icon and choose **Open media folder**). If neither is
+   there, the folder itself is `memory-machine-media` in the home folder.
 3. Replace `piece.mp4` and `piece.wav` by dragging in the new files.
 4. Right-click the **memory-machine** icon and choose **Start**.
 

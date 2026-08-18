@@ -298,13 +298,14 @@ if [ "$1" = "configure" ]; then
 
     SRC=/usr/share/applications/motion-player.desktop
     getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1":"$6}' | while IFS=: read -r U H; do
-        [ -d "$H/Desktop" ] || continue
-
-        # Create a simple A/V directory in the user's home and alias it on the desktop.
+        # Create a simple A/V directory in the user's home, Desktop or not.
         MEDIA_DIR="$H/memory-machine-media"
         mkdir -p "$MEDIA_DIR"
         chown "$U:$U" "$MEDIA_DIR" 2>/dev/null || true
         chmod 0755 "$MEDIA_DIR"
+
+        [ -d "$H/Desktop" ] || continue
+
         ln -sfn "$MEDIA_DIR" "$H/Desktop/memory-machine-media" 2>/dev/null || true
         chown -h "$U" "$H/Desktop/memory-machine-media" 2>/dev/null || true
 
