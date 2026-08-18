@@ -25,7 +25,12 @@ esac
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/motion-player"
 mkdir -p "$STATE_DIR"
-LOG="$STATE_DIR/motion-player.log"
+# The engine logs to motion-player.log through a rotating handler it owns. This
+# script must not write there too: two writers interleave, and when the handler
+# rotates the file this shell keeps appending to the old inode. Raw SDL and Qt
+# output also carries control bytes, which is what makes grep call the log
+# binary and stop reading it.
+LOG="$STATE_DIR/motion-player-launcher.log"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export PYGAME_HIDE_SUPPORT_PROMPT=1
