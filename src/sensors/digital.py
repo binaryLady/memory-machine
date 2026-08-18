@@ -42,8 +42,42 @@ class DigitalSensor(Sensor):
         self._button: Any = None
         self._last_raw = False
 
+    def _ensure_pin_factory(self) -> None:
+        """Resolve a pin factory, reporting why rather than raising BadPinFactory.
+
+        gpiozero's discovery raises with no detail about which backends it tried
+        or what each one said, which leaves nothing to act on when it fails in
+        one process and succeeds in another. Ask it first, then fall back to
+        naming lgpio explicitly, which surfaces the underlying error instead of
+        swallowing it.
+        """
+        from gpiozero import Device  # type: ignore[import-untyped]
+
+        if Device.pin_factory is not None:
+            return
+
+        try:
+            Device.ensure_pin_factory()
+            LOGGER.info("gpiozero pin factory: %s", type(Device.pin_factory).__name__)
+            return
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning(
+                "gpiozero could not choose a pin factory (%s); naming lgpio explicitly", exc
+            )
+
+        from gpiozero.pins.lgpio import LGPIOFactory  # type: ignore[import-untyped]
+
+        try:
+            Device.pin_factory = LGPIOFactory()
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.error("lgpio pin factory could not be created: %r", exc)
+            raise
+        LOGGER.info("Using the lgpio pin factory explicitly")
+
     def _start(self) -> None:
         from gpiozero import Button  # type: ignore[import-untyped]
+
+        self._ensure_pin_factory()
 
         # gpiozero handles the first-level bounce filter.
         self._button = Button(
