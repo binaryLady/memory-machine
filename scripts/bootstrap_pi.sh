@@ -27,7 +27,7 @@ mkdir -p "$MEDIA_DIR"
 
 # Install build and runtime dependencies.
 sudo apt update
-sudo apt install -y dpkg-dev python3 python3-pip ffmpeg zenity xdg-utils unclutter git
+sudo apt install -y dpkg-dev python3 python3-pip ffmpeg zenity xdg-utils unclutter libnotify-bin git
 sudo apt install -y python3-opencv python3-gpiozero python3-lgpio python3-pygame || true
 
 # Build and install the package.
