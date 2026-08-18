@@ -33,9 +33,11 @@ def _acquire_lock(state_dir: Path) -> int:
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (IOError, OSError):
-        LOGGER.warning("Another instance is already running; exiting.")
+        # Non-zero: exiting 0 here reads as a clean run, so a supervisor with
+        # Restart= would loop back into the same collision without saying why.
+        LOGGER.warning("Another instance already holds %s; exiting.", lock_path)
         os.close(fd)
-        sys.exit(0)
+        sys.exit(3)
     return fd
 
 

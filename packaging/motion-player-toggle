@@ -15,12 +15,18 @@ done
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 SERVICE="motion-player.service"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/motion-player"
 
 is_active() {
     systemctl --user is-active "$SERVICE" >/dev/null 2>&1
 }
 
 run() {
+    # The package can replace the unit file underneath a running manager, which
+    # otherwise just warns and carries on with the stale copy.
+    if systemctl --user show "$SERVICE" -p NeedDaemonReload 2>/dev/null | grep -q "=yes"; then
+        systemctl --user daemon-reload
+    fi
     systemctl --user "$1" "$SERVICE"
 }
 
@@ -28,9 +34,26 @@ run() {
 # like nothing happened. Say so on screen when a notifier is available.
 say() {
     echo "$1"
+    # A headless or notifier-less session makes notify-send fail loudly on
+    # stderr; the terminal line above is the real output, so keep it quiet.
     if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
-        notify-send --app-name="memory-machine" --icon=motion-player "memory-machine" "$1" || true
+        notify-send --app-name="memory-machine" --icon=motion-player \
+            "memory-machine" "$1" >/dev/null 2>&1 || true
     fi
+}
+
+report_start() {
+    if [ "$(settled_state)" = "running" ]; then
+        say "memory-machine started."
+        return 0
+    fi
+    say "memory-machine could not start; it exited straight after launching."
+    echo
+    echo "Last lines of $STATE_DIR/motion-player.log:"
+    tail -8 "$STATE_DIR/motion-player.log" 2>/dev/null || echo "  (no log yet)"
+    echo
+    echo "Full detail: systemctl --user status $SERVICE"
+    return 1
 }
 
 settled_state() {
@@ -50,7 +73,7 @@ case "$ACTION" in
             exit 0
         fi
         run start
-        say "memory-machine started ($(settled_state))."
+        report_start
         ;;
     stop)
         run stop
@@ -62,7 +85,7 @@ case "$ACTION" in
             say "memory-machine stopped."
         else
             run start
-            say "memory-machine started ($(settled_state))."
+            report_start
         fi
         ;;
 esac

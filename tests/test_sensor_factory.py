@@ -149,3 +149,21 @@ def test_spacebar_toggles_engagement() -> None:
     sensor.handle_key(ord(" "))
     assert not sensor.is_engaged()
     assert events.get_nowait()[0] == "replace"
+
+
+def test_a_second_instance_exits_with_a_distinct_status(tmp_path) -> None:
+    """Exiting 0 made a lock collision look like a clean run to systemd."""
+    import fcntl
+    import os
+
+    import motion_test
+
+    held = os.open(str(tmp_path / "instance.lock"), os.O_CREAT | os.O_RDWR)
+    fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        with pytest.raises(SystemExit) as exc:
+            motion_test._acquire_lock(tmp_path)
+        assert exc.value.code == 3
+    finally:
+        fcntl.flock(held, fcntl.LOCK_UN)
+        os.close(held)
