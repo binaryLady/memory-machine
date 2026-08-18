@@ -34,7 +34,8 @@ show() {
     done
     echo
     echo "Preferred modes (first line is what the sink asks for):"
-    for modes in /sys/class/drm/card*-HDMI-A-*/modes; do
+    # Every connector, not just HDMI: a DSI or DPI panel is a display too.
+    for modes in /sys/class/drm/card*-*/modes; do
         [ -s "$modes" ] || continue
         conn="$(basename "$(dirname "$modes")")"
         printf '  %-12s %s\n' "${conn#*-}" "$(head -n1 "$modes")"
