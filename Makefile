@@ -26,6 +26,7 @@ lint:
 	find src tests packaging -name '*.py' -exec python3 -m py_compile {} +
 	bash -n packaging/build_deb.sh
 	bash -n packaging/motion-player-toggle
+	bash -n packaging/motion-player-media
 	bash -n scripts/bootstrap_pi.sh
 	bash -n scripts/update.sh
 	bash -n scripts/status.sh

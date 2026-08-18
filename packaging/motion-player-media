@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Open the memory-machine media folder in the desktop file manager.
+set -euo pipefail
+
+exec xdg-open "$HOME/memory-machine-media"

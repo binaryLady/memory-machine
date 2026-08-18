@@ -210,6 +210,9 @@ chmod 0755 "$STAGE/usr/bin/motion-player-update"
 cp "$REPO_ROOT/packaging/motion-player-toggle" "$STAGE/usr/bin/motion-player-toggle"
 chmod 0755 "$STAGE/usr/bin/motion-player-toggle"
 
+cp "$REPO_ROOT/packaging/motion-player-media" "$STAGE/usr/bin/motion-player-media"
+chmod 0755 "$STAGE/usr/bin/motion-player-media"
+
 # ---------------------------------------------------------------------------
 # 6. systemd user service
 # ---------------------------------------------------------------------------
