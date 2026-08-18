@@ -45,6 +45,56 @@ engine loads it unchanged.
 
 ---
 
+## Multiple screens
+
+An HDMI splitter mirrors one signal, so the Pi renders a single framebuffer and
+each screen scales that same image to its own panel. Nothing in the engine
+changes for a multi-screen install.
+
+Different **resolutions** are fine. Different **aspect ratios** are not: at the
+same aspect (1280x720, 1920x1080 and 3840x2160 are all 16:9) every screen shows
+the piece correctly, one downscaling and another upscaling. A 16:10, 4:3 or
+portrait panel will letterbox or stretch according to its own scaler, and the Pi
+cannot compensate per screen — there is only one signal.
+
+See what mode the splitter is currently advertising. Mixed-resolution sinks make
+splitters report either the lowest common mode or whatever they detected first,
+which can quietly drop the whole install to 720p:
+
+```bash
+cat /sys/class/drm/card*-HDMI-A-1/modes | head -20
+```
+
+Don't trust that negotiation. Force the mode on the single existing line in
+`/boot/firmware/cmdline.txt`:
+
+```
+video=HDMI-A-1:1920x1080@60D
+```
+
+Use `HDMI-A-2` if the splitter is in the Pi's second port. The trailing `D`
+forces the mode even when EDID disagrees and keeps the connector alive when a
+screen is powered off — without it, switching a monitor off can blank or resize
+the piece mid-show.
+
+Confirm what is actually going out after a reboot:
+
+```bash
+wlr-randr
+```
+
+Force a mode every screen can **accept as input**, which is not the same as its
+native resolution. Nearly all 720p HDMI TVs accept 1080p and downscale
+internally, but some 1366x768 monitors top out at 1360x768 and will show
+nothing at 1080p. Power each screen on one at a time after the change and check
+that it syncs.
+
+Then encode `piece.mp4` at exactly the forced mode, so the Pi does no scaling at
+all. Do not master at 4K to serve a 4K screen: the splitter emits one mode
+regardless, and 4K decode is what the Pi cannot sustain.
+
+---
+
 ## Service control
 
 ```bash
@@ -223,6 +273,14 @@ matches the source; a mismatch is logged at startup:
 
 ```bash
 grep -E "Video loaded|Reverse clip" ~/.local/state/motion-player/motion-player.log | tail -5
+```
+
+**One screen is black, or every screen dropped to a lower resolution.** The
+splitter is choosing the mode. Force it in `/boot/firmware/cmdline.txt` as
+above, then check what the Pi settled on:
+
+```bash
+wlr-randr
 ```
 
 **A command appears to do nothing.** The launcher redirects output to the log
