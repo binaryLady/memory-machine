@@ -162,6 +162,7 @@ _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
+    "none",
     "switch",
     "reed",
     "beam",

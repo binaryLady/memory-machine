@@ -232,3 +232,30 @@ def test_missing_video_survives_a_lift(monkeypatch: pytest.MonkeyPatch) -> None:
     tick(engine)
 
     assert engine._black_frame is not None
+
+
+def test_idle_mode_can_be_overridden_at_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """With no sensor the piece loops forward instead of holding a still frame."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+    import cv2
+
+    engine.set_mode("IDLE")
+    engine.set_idle_mode("loop_forward")
+
+    before = len(cv2.shown)
+    for _ in range(4):
+        tick(engine)
+
+    assert engine._current_index == 4.0
+    assert len(cv2.shown) > before
+
+
+def test_overriding_to_the_same_mode_is_a_no_op(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+
+    engine.set_mode("IDLE")
+    engine.set_idle_mode("hold_first_frame")
+
+    assert engine._idle_mode == "hold_first_frame"

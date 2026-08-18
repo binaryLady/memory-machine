@@ -223,3 +223,13 @@ def test_fused_sensor_raises_when_no_member_starts() -> None:
 
     with pytest.raises(RuntimeError):
         fused.start(events)
+
+
+def test_none_sensor_type_never_engages() -> None:
+    from sensors import NullSensor
+
+    sensor = make_sensor(FakeSensorConfig(sensor_type="none"))
+
+    assert isinstance(sensor, NullSensor)
+    assert not sensor.is_engaged()
+    assert not sensor.is_lifted()

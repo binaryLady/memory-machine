@@ -17,7 +17,7 @@ import config
 import logging_setup
 import status as status_module
 from audio import AudioEngine
-from sensors import make_sensor, start_sensor
+from sensors import NullSensor, make_sensor, start_sensor
 from state import StateMachine
 from telemetry import Telemetry
 from video import VideoEngine
@@ -73,12 +73,20 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int) -> int:
     events: queue.Queue = queue.Queue()
     started = start_sensor(sensor, events)
-    if started is not sensor:
+    degraded = started is not sensor
+    if degraded:
         status.set_last_error(
             f"Sensor {sensor.name} could not start; running on the keyboard backend"
         )
     sensor = started
     status.set_sensor(sensor)
+    status.set_audio_sink(audio.resolved_sink)
+
+    # With no working sensor the lift never comes, and a held first frame reads
+    # as a broken installation. Loop the piece forward instead; the rewind is
+    # what needs the sensor, not the video.
+    if degraded or isinstance(sensor, NullSensor):
+        video.set_idle_mode("loop_forward")
     status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
     video.set_mode("IDLE")
