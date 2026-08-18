@@ -49,7 +49,9 @@ class Telemetry:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._start_time = time.monotonic()
-        self._last_heartbeat = 0.0
+        # None means "never sent"; 0.0 would gate the first heartbeat on host
+        # uptime, since time.monotonic() counts from boot on Linux.
+        self._last_heartbeat: float | None = None
 
         if self._enabled and not self._endpoint:
             LOGGER.warning("Telemetry enabled but endpoint_url is empty; disabling")
@@ -95,7 +97,7 @@ class Telemetry:
         if not self._enabled:
             return
         now = time.monotonic()
-        if now - self._last_heartbeat < self._interval_s:
+        if self._last_heartbeat is not None and now - self._last_heartbeat < self._interval_s:
             return
         self._last_heartbeat = now
         snapshot = self._status.snapshot()
