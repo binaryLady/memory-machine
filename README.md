@@ -72,16 +72,35 @@ Place the real video and audio files in `~/memory-machine-media`, which the
 desktop shortcut **memory-machine-media** points to:
 
 ```
-~/memory-machine-media/piece.mp4
-~/memory-machine-media/piece.wav
-~/memory-machine-media/piece.reverse.mp4
+~/memory-machine-media/piece.mp4                    always
+~/memory-machine-media/piece.wav                    always
+~/memory-machine-media/piece.reverse.mp4            always
+~/memory-machine-media/piece_portrait.mp4           one per panel shape
+~/memory-machine-media/piece_portrait.reverse.mp4   with each cut
 ```
 
-`piece.reverse.mp4` is a pre-rendered reverse of `piece.mp4`. Build it once,
-whenever the footage changes:
+Every video cut needs its own pre-rendered reverse, because the rewind plays
+that copy forward — a cut without one goes black the moment the headphones are
+lifted. Build them once, whenever the footage changes, one call per cut:
 
 ```bash
 motion-player-reverse
+```
+
+```bash
+motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
+```
+
+For a show, render each cut at the resolution it will actually be displayed at
+instead, which builds the reverse at the same time and removes per-frame scaling
+entirely:
+
+```bash
+motion-player-prepare
+```
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1080x1920
 ```
 
 The rewind plays that file forward, so playback stays sequential and never
@@ -158,8 +177,8 @@ keys are warned and ignored; missing keys fall back to the default below.
 video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
 audio_file          = piece.wav
 reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
-portrait_video_file   =                ; optional cut for portrait screens
-portrait_reverse_file =                ; its reversed copy; both or neither
+cuts                  =                ; alternative cuts, comma separated;
+                                       ; the closest in shape to the screen wins
 
 [playback]
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black

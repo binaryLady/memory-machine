@@ -12,8 +12,8 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
 | `motion-player-status` | `--json` | state, sensor, audio sink, display mode, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `--size WxH` `--mode fit\|fill` | render the piece at the screen's resolution and build its reverse |
-| `motion-player-reverse` | `[SRC] [DST]` | build the pre-rendered reverse clip |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill` | render a cut at the screen's resolution and build its reverse; run per cut |
+| `motion-player-reverse` | `[SRC] [DST]` | build the pre-rendered reverse clip; run per cut, including the portrait one |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
 | `motion-player` | `--check-config` `--verbose` `--log` `--config PATH` | the engine itself |
@@ -119,20 +119,85 @@ motion-player-toggle --start
 
 ## Media
 
-The piece needs three files in `~/memory-machine-media/`:
+The piece needs these files in `~/memory-machine-media/`:
+
+| File | What it is | Needed |
+| --- | --- | --- |
+| `piece.mp4` | the footage, played forward | always |
+| `piece.reverse.mp4` | pre-rendered reverse of it, played during the rewind | always |
+| `piece.wav` | the audio, played forward on lift | always |
+| `piece_<shape>.mp4` | a cut framed for another screen shape | one per panel shape |
+| `piece_<shape>.reverse.mp4` | pre-rendered reverse of that cut | with each cut |
+
+**Every video file needs its own reversed copy.** The rewind plays that copy
+forward, so a cut without one goes black the moment the headphones are lifted.
+That applies to the portrait cut and to anything produced by
+`motion-player-prepare` as much as to `piece.mp4`.
+
+Open the folder in the desktop file manager:
+
+```bash
+motion-player-media
+```
+
+`.mp3` works anywhere `.wav` does — set `audio_file` in the config and the
+engine loads it unchanged.
+
+### Building the reversed copies
+
+After any change to the footage, rebuild the reverse of **each** cut. With no
+arguments it does `piece.mp4`:
+
+```bash
+motion-player-reverse
+```
+
+Name the file to do any other cut. The output defaults to the same name with
+`.reverse` before the extension:
+
+```bash
+motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
+```
+
+Both paths can be given explicitly, and the encode can be tuned:
+
+```bash
+motion-player-reverse ~/memory-machine-media/other.mp4 ~/memory-machine-media/other.reverse.mp4
+```
+
+```bash
+CRF=20 PRESET=veryfast SEGMENT_SECONDS=5 motion-player-reverse
+```
+
+Encoding is CPU-heavy. Running it on a laptop and copying the result over is
+usually much faster than encoding on the Pi.
 
 ### Preparing media for a show
 
 For an installation that loops all day, render the piece at the screen's own
-resolution once rather than scaling every frame on the Pi:
+resolution once rather than scaling every frame on the Pi. This writes both the
+sized clip and its reversed copy, and prints the config lines to paste:
 
 ```bash
 motion-player-prepare
 ```
 
-That reads the screen's reported mode, renders `piece.<WxH>.mp4` and its
-reversed copy, and prints the config lines to paste. Pass `--size 1920x1080` to
-be explicit, or `--mode fill` to cover the screen instead of padding it.
+With no arguments it takes `piece.mp4` at the screen's reported mode and writes
+`piece.<WxH>.mp4` and `piece.<WxH>.reverse.mp4`. Be explicit about either:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece.mp4 --size 1920x1080 --mode fill
+```
+
+`--mode fit` pads with black, `--mode fill` covers the screen and crops the
+overflow.
+
+**Preparing the portrait cut needs an explicit `--size`**, because the default
+comes from the screen this Pi is attached to, which is the wrong shape for it:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1080x1920
+```
 
 Once the media matches the output exactly the engine skips scaling entirely, and
 playback becomes decode and upload with nothing in between. That is the single
@@ -149,66 +214,51 @@ and how many frames missed their deadline. Late frames in any number mean the Pi
 is not keeping up: prepare the media at the output size first, and if it still
 cannot, the source resolution is too high for software decode.
 
-### A portrait cut
+### Cuts for different screens
 
-If some screens are mounted vertically, provide a second cut of the piece framed
-for them. The engine picks it whenever the screen is taller than it is wide, and
-falls back to the default cut if it is missing:
+A piece framed for a square panel does not suit a portrait one. List alternative
+cuts and the engine uses whichever is closest in **shape** to the attached
+screen, so one media folder and one config serve a whole set of panels:
 
 ```ini
 [media]
-portrait_video_file   = piece_portrait.mp4
-portrait_reverse_file = piece_portrait.reverse.mp4
+video_file = piece.mp4
+cuts       = piece_square.mp4, piece_portrait.mp4, piece_wide.mp4
 ```
 
-Both must be set together — a portrait cut needs its own reversed copy, built
-the same way:
+`video_file` competes as a candidate too, so it is the natural home for the
+default framing rather than a special case.
+
+Shape is what matters, not resolution — a 720x720 cut is an equally good match
+for any square panel. Given cuts at 720x720, 800x1280, 1280x800 and 800x480:
+
+| Screen | Cut chosen |
+| --- | --- |
+| 720x720 square panel | 720x720 |
+| 800x1280 portrait panel | 800x1280 |
+| 1280x800 monitor | 1280x800 |
+| 800x480 touchscreen | 800x480 |
+| 1920x1080 projector or TV | 800x480, nearest at 5:3 |
+
+Every cut needs its reversed copy beside it, named the way the tooling writes it
+— `piece_portrait.mp4` needs `piece_portrait.reverse.mp4`. A cut missing one is
+skipped with a logged error rather than chosen, since choosing it would black
+the screen on lift:
 
 ```bash
 motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
 ```
 
+For a show, prepare each cut at the exact resolution of the panel it is for,
+which builds its reverse at the same time and removes per-frame scaling:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
+```
+
 The screen shape is read from the pinned `display_mode`, or from what the sink
-advertises, before the window is opened. `playback.scaling` still applies to
-whatever difference remains between the cut and the screen.
-
-If no sensor is fitted at all, set `sensor_type = none` in the config. The piece
-then loops forward continuously and never rewinds — no sensor, no audio, no
-reverse, just the footage playing.
-
-| File | What it is |
-| --- | --- |
-| `piece.mp4` | the footage, played forward |
-| `piece.reverse.mp4` | pre-rendered reverse of the above, played during the rewind |
-| `piece.wav` | the audio, played forward on lift |
-
-Open the folder in the desktop file manager:
-
-```bash
-motion-player-media
-```
-
-Build the reversed companion clip after any change to the footage:
-
-```bash
-motion-player-reverse
-```
-
-Point it at other files, or tune the encode:
-
-```bash
-motion-player-reverse ~/memory-machine-media/other.mp4 ~/memory-machine-media/other.reverse.mp4
-```
-
-```bash
-CRF=20 PRESET=veryfast SEGMENT_SECONDS=5 motion-player-reverse
-```
-
-Encoding is CPU-heavy. Running it on a laptop and copying the result over is
-usually much faster than encoding on the Pi.
-
-`.mp3` works anywhere `.wav` does — set `audio_file` in the config and the
-engine loads it unchanged.
+advertises, before the window is opened. `playback.scaling` still covers
+whatever difference remains between the chosen cut and the screen.
 
 ---
 
@@ -331,9 +381,9 @@ single output mode. Mixed orientations need one Pi per orientation.
 `fit` pads with black, `fill` crops to cover, `stretch` distorts. See the
 scaling entry under Troubleshooting.
 
-Then encode `piece.mp4` at exactly the forced mode, so the Pi does no scaling at
-all. Do not master at 4K to serve a 4K screen: the splitter emits one mode
-regardless, and 4K decode is what the Pi cannot sustain.
+Then render the media at exactly the forced mode with `motion-player-prepare`,
+so the Pi does no scaling at all. Do not master at 4K to serve a 4K screen: the
+splitter emits one mode regardless, and 4K decode is what the Pi cannot sustain.
 
 ---
 
@@ -443,6 +493,10 @@ cp /etc/motion-player/config.ini /tmp/test.ini && sed -i -e 's/^sensor_type.*/se
 ```bash
 python3 /opt/motion-player/motion_test.py --verbose --config /tmp/test.ini
 ```
+
+If no sensor is fitted at all, set `sensor_type = none` in the config. The piece
+then loops forward continuously and never rewinds — no sensor, no audio, no
+reverse, just the footage playing.
 
 `q` and `Esc` quit from any sensor backend now, so you no longer depend on the
 keyboard sensor to get out of fullscreen. Click the video window to focus it,
