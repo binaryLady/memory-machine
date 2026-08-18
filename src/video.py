@@ -17,6 +17,8 @@ _RECT_RECHECK_FRAMES = 30
 # it would render the piece as a postage stamp.
 _MIN_PLAUSIBLE_AREA = 320 * 240
 _FULLSCREEN_ATTEMPTS = 10
+# How often to report achieved frame rate, in seconds.
+_TIMING_REPORT_S = 10.0
 
 # Local import only when cv2 is available; the module itself may be imported on
 # laptops for config/status, so delay the heavy import until construction.
@@ -67,6 +69,11 @@ class VideoEngine:
         self._frames_since_rect_check = 0
         self._fullscreen_settled = False
         self._fullscreen_attempts = 0
+        self._timing_started = 0.0
+        self._timing_frames = 0
+        self._timing_total_s = 0.0
+        self._timing_worst_s = 0.0
+        self._timing_late = 0
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._load()
@@ -353,22 +360,58 @@ class VideoEngine:
     def at_start(self) -> bool:
         return self._mode == "REVERSE" and self._current_index <= 0
 
+    def _record_frame(self, started: float, was_late: bool) -> None:
+        """Track how long frames actually take, so stutter can be measured."""
+        elapsed = time.monotonic() - started
+        if self._timing_started == 0.0:
+            self._timing_started = started
+        self._timing_frames += 1
+        self._timing_total_s += elapsed
+        self._timing_worst_s = max(self._timing_worst_s, elapsed)
+        self._timing_late += int(was_late)
+
+        window = started - self._timing_started
+        if window < _TIMING_REPORT_S:
+            return
+
+        LOGGER.info(
+            "Playback %s: %.1f fps target %.1f, frame mean %.1fms worst %.1fms, %d/%d late",
+            self._mode,
+            self._timing_frames / window,
+            self._fps,
+            (self._timing_total_s / self._timing_frames) * 1000,
+            self._timing_worst_s * 1000,
+            self._timing_late,
+            self._timing_frames,
+        )
+        self._timing_started = 0.0
+        self._timing_frames = 0
+        self._timing_total_s = 0.0
+        self._timing_worst_s = 0.0
+        self._timing_late = 0
+
     def render_next(self) -> None:
         if self._mode == "BLACK" or self._frame_count <= 0:
             self._render_black()
             return
 
-        now = time.monotonic()
+        started = time.monotonic()
+        now = started
         if now < self._next_deadline:
             return
 
         # Advance to the next frame deadline based on the previous one to
         # prevent drift over long runs.
         self._next_deadline += self._interval
-        if self._next_deadline < now:
+        was_late = self._next_deadline < now
+        if was_late:
             # We fell behind; resync to now + one interval to avoid a burst.
             self._next_deadline = now + self._interval
 
+        self._render_for_mode()
+        self._record_frame(started, was_late)
+
+    def _render_for_mode(self) -> None:
         if self._mode == "IDLE":
             if self._idle_mode == "loop_forward":
                 self._current_index += 1
