@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly memory-machine update check
+
+[Timer]
+; Well outside gallery hours, so a restart is never visible to visitors.
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

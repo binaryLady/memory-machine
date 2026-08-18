@@ -81,8 +81,8 @@ motion-player-toggle --start
   the wrong length.
 - **Config lives at `/etc/motion-player/config.ini`**, root-owned — not under
   `~/.config`.
-- **`motion-player-update` needs `~/memory-machine/.git`.** See Getting started
-  above if it reports "Not running from a git checkout".
+- **`motion-player-update` clones its own checkout** if one is missing, so it
+  works on a Pi installed from a bare `.deb`.
 - **Never install with a bare `motion-player_*.deb` glob.** Stale builds in the
   repo root make apt pick between candidates and silently do nothing —
   `Installing: 0, Upgrading: 0`. Run `make clean` before `make release`.
@@ -300,17 +300,57 @@ motion-player-toggle --start
 
 ## Updating
 
+One command does everything: fetch, rebuild, reinstall, restart. It clones the
+checkout first if there isn't one, so it works on a Pi that was installed
+straight from a `.deb`:
+
 ```bash
 motion-player-update
 ```
+
+There is also an **Update** action on the right-click menu of the
+**memory-machine** desktop icon, for updating without a terminal.
+
+Ask whether anything is waiting, without changing a thing:
 
 ```bash
 motion-player-update --check
 ```
 
+Discard local edits to the checkout and update regardless:
+
 ```bash
 motion-player-update --force
 ```
+
+If the service fails to stay up after an update, the previous package is
+reinstalled automatically and the piece keeps running on it. Every run is
+recorded:
+
+```bash
+tail -20 ~/.local/state/motion-player/update.log
+```
+
+### Nightly automatic updates
+
+```bash
+motion-player-update --enable-auto
+```
+
+That enables a timer that runs at 04:30 with a randomised delay, well outside
+gallery hours. An update is skipped if someone is mid-piece, and retried on the
+next run. To stop:
+
+```bash
+motion-player-update --disable-auto
+```
+
+Unattended runs still need to install a package, which needs root. The command
+prints the one-line `sudoers` rule to allow that without a password — it grants
+this account passwordless root for the install helper, which is effectively root
+access, so it is opt-in. Without it the timer will fetch and build but fail at
+the install step; use the menu's **Update** action instead if you would rather
+approve each upgrade.
 
 ---
 

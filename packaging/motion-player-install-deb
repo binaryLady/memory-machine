@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# motion-player-install-deb: install the newest built package.
+#
+# Deliberately takes no arguments, so unattended updates can be granted one
+# fixed passwordless sudo rule instead of a wildcard over apt.
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Must run as root, via sudo." >&2
+    exit 1
+fi
+
+OWNER="${SUDO_USER:-root}"
+REPO="$(getent passwd "$OWNER" | cut -d: -f6)/memory-machine"
+
+DEB="$(ls -t "$REPO"/motion-player_*.deb 2>/dev/null | head -n1 || true)"
+if [ -z "$DEB" ]; then
+    echo "No built package found in $REPO" >&2
+    exit 1
+fi
+
+echo "Installing $DEB"
+exec apt install --reinstall -y --allow-downgrades "$DEB"
