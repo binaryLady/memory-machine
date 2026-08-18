@@ -53,13 +53,17 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
         problems.append(f"Video missing: {cfg.media.video_file}")
     if not cfg.media.audio_file.exists():
         problems.append(f"Audio missing: {cfg.media.audio_file}")
+    if not cfg.media.reverse_file.exists():
+        problems.append(
+            f"Reverse clip missing: {cfg.media.reverse_file}. Build it with motion-player-reverse."
+        )
     if audio.resolved_sink == "none":
         problems.append("Audio mixer could not be initialised")
-    LOGGER.info("Preflight: video_exists=%s audio_exists=%s audio_sink=%s preload=%s",
+    LOGGER.info("Preflight: video_exists=%s audio_exists=%s reverse_exists=%s audio_sink=%s",
                 cfg.media.video_file.exists(),
                 cfg.media.audio_file.exists(),
-                audio.resolved_sink,
-                getattr(video, "_preload", False))
+                cfg.media.reverse_file.exists(),
+                audio.resolved_sink)
     return problems
 
 
@@ -70,7 +74,6 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
     status.set_sensor(sensor)
     video.set_audio_duration(audio.duration_s)
     video.set_mode("IDLE")
-    status.set_frames_preloaded(getattr(video, "_preload", False))
     telemetry.start()
 
     # Track whether audio was playing to emit audio_end cleanly.
@@ -95,7 +98,9 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
             pass
 
         # Handle keyboard input through OpenCV (main thread only).
-        key = video._cv2.waitKey(1) & 0xFF
+        key = video._cv2.waitKey(1)
+        if key != -1:
+            key &= 0xFF
         if hasattr(sensor, "handle_key"):
             cmd = sensor.handle_key(key)
             if cmd == "quit":
@@ -152,6 +157,7 @@ def run(argv: list[str] | None = None) -> int:
     logging_setup.setup(
         "debug" if args.verbose else cfg.system.log_level,
         cfg.system.log_max_mb,
+        console=args.verbose,
     )
 
     state_dir = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "motion-player"

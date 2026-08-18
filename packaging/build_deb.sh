@@ -213,6 +213,9 @@ chmod 0755 "$STAGE/usr/bin/motion-player-toggle"
 cp "$REPO_ROOT/packaging/motion-player-media" "$STAGE/usr/bin/motion-player-media"
 chmod 0755 "$STAGE/usr/bin/motion-player-media"
 
+cp "$REPO_ROOT/packaging/motion-player-reverse" "$STAGE/usr/bin/motion-player-reverse"
+chmod 0755 "$STAGE/usr/bin/motion-player-reverse"
+
 # ---------------------------------------------------------------------------
 # 6. systemd user service
 # ---------------------------------------------------------------------------
@@ -242,10 +245,10 @@ chmod 0644 "$STAGE/DEBIAN/conffiles"
 # 9. Package metadata
 # ---------------------------------------------------------------------------
 if [[ "${STRICT_DEPS:-0}" == "1" ]]; then
-    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, zenity, xdg-utils, unclutter"
+    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, ffmpeg, zenity, xdg-utils, unclutter"
     RECOMMENDS=""
 else
-    DEPENDS="python3, zenity, xdg-utils, unclutter"
+    DEPENDS="python3, ffmpeg, zenity, xdg-utils, unclutter"
     RECOMMENDS="python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame"
 fi
 

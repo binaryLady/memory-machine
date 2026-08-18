@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 
-def setup(log_level: str, log_max_mb: int) -> logging.Logger:
+def setup(log_level: str, log_max_mb: int, console: bool = False) -> logging.Logger:
     """Configure root logging to a size-capped rotating file.
 
     log_max_mb is interpreted as a hard cap across the active file plus all
@@ -46,6 +46,14 @@ def setup(log_level: str, log_max_mb: int) -> logging.Logger:
     for handler in root.handlers[:]:
         root.removeHandler(handler)
     root.addHandler(file_handler)
+
+    # Without this, --verbose only raises the level and everything still goes
+    # to the log file, so a foreground run looks like it has hung.
+    if console:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(fmt)
+        console_handler.setLevel(logging.DEBUG)
+        root.addHandler(console_handler)
 
     # Dedicated transition logger; all sensor raw and accepted edges go here.
     transitions = logging.getLogger("motion-player.transitions")

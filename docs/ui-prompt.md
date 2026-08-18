@@ -39,7 +39,6 @@ interface TelemetryRecord {
   accepted_count?: number;
   rejected_count?: number;
   audio_sink?: string;
-  frames_preloaded?: boolean;
   last_error?: string;
   log_tail?: string[]; // last N lines of the local log file
 }
@@ -56,7 +55,7 @@ At `lab.thetechmargin.com/memorymachine` render:
 1. **Live status card** — online/offline (heartbeat within last 2× interval),
    current state (`IDLE` / `ENGAGED`), sensor name, raw sensor reading.
 2. **Counts** — lift, accepted transitions, rejected transitions, uptime.
-3. **Audio/video health** — resolved audio sink, frames preloaded, last error.
+3. **Audio/video health** — resolved audio sink, last error.
 4. **Event feed** — most recent lift/replace events with timestamps; show in
    chronological order newest-first.
 5. **Log tail viewer** — render the `log_tail` array as a monospace, read-only

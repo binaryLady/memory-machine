@@ -20,6 +20,7 @@ MEDIA_DIR = Path.home() / "memory-machine-media"
 class MediaConfig:
     video_file: Path
     audio_file: Path
+    reverse_file: Path
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,6 @@ class PlaybackConfig:
     idle_mode: str
     reverse_rate: str
     on_rewind_end: str
-    preload_frames: str
     fullscreen: bool
     display: str
 
@@ -107,12 +107,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "media": {
         "video_file": "piece.mp4",
         "audio_file": "piece.wav",
+        "reverse_file": "piece.reverse.mp4",
     },
     "playback": {
         "idle_mode": "hold_first_frame",
         "reverse_rate": "native",
         "on_rewind_end": "hold",
-        "preload_frames": "auto",
         "fullscreen": True,
         "display": "auto",
     },
@@ -156,7 +156,6 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 _VALID_IDLE_MODES = {"hold_first_frame", "loop_forward", "black"}
 _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
-_VALID_PRELOAD = {"auto", "true", "false"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
     "switch",
@@ -271,12 +270,12 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
         media=MediaConfig(
             video_file=_resolve_path(str(media_raw.get("video_file", DEFAULTS["media"]["video_file"]))),
             audio_file=_resolve_path(str(media_raw.get("audio_file", DEFAULTS["media"]["audio_file"]))),
+            reverse_file=_resolve_path(str(media_raw.get("reverse_file", DEFAULTS["media"]["reverse_file"]))),
         ),
         playback=PlaybackConfig(
             idle_mode=str(playback_raw.get("idle_mode", DEFAULTS["playback"]["idle_mode"])),
             reverse_rate=str(playback_raw.get("reverse_rate", DEFAULTS["playback"]["reverse_rate"])),
             on_rewind_end=str(playback_raw.get("on_rewind_end", DEFAULTS["playback"]["on_rewind_end"])),
-            preload_frames=str(playback_raw.get("preload_frames", DEFAULTS["playback"]["preload_frames"])),
             fullscreen=_parse_bool(playback_raw.get("fullscreen"), DEFAULTS["playback"]["fullscreen"]),
             display=str(playback_raw.get("display", DEFAULTS["playback"]["display"])),
         ),
@@ -338,10 +337,6 @@ def validate(config: Config) -> list[str]:
         problems.append(
             f"playback.on_rewind_end must be one of {_VALID_ON_REWIND_END}; got {config.playback.on_rewind_end!r}"
         )
-    if config.playback.preload_frames not in _VALID_PRELOAD:
-        problems.append(
-            f"playback.preload_frames must be one of {_VALID_PRELOAD}; got {config.playback.preload_frames!r}"
-        )
     if config.audio.on_audio_end not in _VALID_ON_AUDIO_END:
         problems.append(
             f"audio.on_audio_end must be one of {_VALID_ON_AUDIO_END}; got {config.audio.on_audio_end!r}"
@@ -368,7 +363,11 @@ def validate(config: Config) -> list[str]:
             f"playback.reverse_rate must be 'native', 'fit_to_audio', or a float; got {rr!r}"
         )
 
-    for name, path in (("media.video_file", config.media.video_file), ("media.audio_file", config.media.audio_file)):
+    for name, path in (
+        ("media.video_file", config.media.video_file),
+        ("media.audio_file", config.media.audio_file),
+        ("media.reverse_file", config.media.reverse_file),
+    ):
         if not path.exists():
             problems.append(f"{name} not found: {path}")
 
