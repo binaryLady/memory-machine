@@ -66,10 +66,11 @@ motion-player-toggle --start
 
 ## Quick tips
 
-- **`--verbose` has to come first.** `motion-player --check-config` prints
-  nothing, because the launcher redirects output to the log unless `--verbose`
-  leads. Either put it first or call
-  `python3 /opt/motion-player/motion_test.py` directly.
+- **`q` or `Esc` always quits**, whatever the sensor is set to — that is the way
+  out of a fullscreen window without another machine or a virtual console.
+- **`--verbose` has to come first** when running the piece itself, otherwise the
+  launcher sends output to the log. `--check-config`, `--help` and `--log` are
+  exempt and print straight to the terminal.
 - **The log is the real output channel.** The engine writes almost nothing to a
   terminal on its own: `tail -f ~/.local/state/motion-player/motion-player.log`.
 - **Stop the service before any foreground run.** The engine takes a
@@ -207,6 +208,13 @@ regardless, and 4K decode is what the Pi cannot sustain.
 
 ## Service control
 
+The **memory-machine** desktop icon has explicit right-click actions — Start,
+Stop, Status, Update, Open media folder, Run with visible log, Open log file.
+Prefer those to clicking the icon itself, which toggles and is easy to misread.
+Each one reports what it did as a desktop notification.
+
+From a terminal, toggle:
+
 ```bash
 motion-player-toggle
 ```
@@ -218,6 +226,11 @@ motion-player-toggle --start
 ```bash
 motion-player-toggle --stop
 ```
+
+The service waits up to 90 seconds for a display to appear before giving up, so
+starting at boot before the desktop session is ready is not a failure. If no
+display ever appears it says so in the log and exits, rather than running
+invisibly.
 
 The underlying systemd user unit, if you want it directly:
 
@@ -267,18 +280,14 @@ upgrades.
 sudo nano /etc/motion-player/config.ini
 ```
 
-Validate it and print every resolved value. `--verbose` must come **first** —
-the launcher only shows you output when it leads:
+Validate it and print every resolved value:
 
 ```bash
-motion-player --verbose --check-config
+motion-player --check-config
 ```
 
-Or bypass the launcher entirely:
-
-```bash
-python3 /opt/motion-player/motion_test.py --check-config
-```
+This needs no display and takes no lock, so it is safe to run while the piece is
+playing.
 
 Look for `Config OK`. Missing media is reported as `media.video_file not
 found: …`, naming the exact path it tried.
@@ -304,13 +313,15 @@ cp /etc/motion-player/config.ini /tmp/test.ini && sed -i -e 's/^sensor_type.*/se
 python3 /opt/motion-player/motion_test.py --verbose --config /tmp/test.ini
 ```
 
-Click the video window to focus it, then:
+`q` and `Esc` quit from any sensor backend now, so you no longer depend on the
+keyboard sensor to get out of fullscreen. Click the video window to focus it,
+then:
 
 | Key | Effect |
 | --- | --- |
 | `space` | toggle lift / replace |
 | `d` | dump the status snapshot to the log |
-| `q` | quit |
+| `q` or `Esc` | quit |
 
 Keys are read through the OpenCV window, not the terminal — a focused terminal
 swallows them. Run it from the Pi's own desktop session; over SSH the window

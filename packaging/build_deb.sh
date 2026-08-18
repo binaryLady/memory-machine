@@ -76,75 +76,7 @@ done
 # ---------------------------------------------------------------------------
 # 4. Launcher
 # ---------------------------------------------------------------------------
-cat > "$STAGE/usr/bin/motion-player" <<'LAUNCHER'
-#!/usr/bin/env bash
-# Silent launcher for motion-player. No crash dialogs, no terminal.
-set -uo pipefail
-
-APP_DIR=/opt/motion-player
-PY_SCRIPT="$APP_DIR/motion_test.py"
-APP_NAME="memory-machine"
-
-VERBOSE=0
-case "${1:-}" in
-    --verbose|-v) VERBOSE=1 ;;
-    --log) exec xdg-open "${XDG_STATE_HOME:-$HOME/.local/state}/motion-player/motion-player.log" 2>/dev/null || exec cat "${XDG_STATE_HOME:-$HOME/.local/state}/motion-player/motion-player.log" ;;
-esac
-
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/motion-player"
-mkdir -p "$STATE_DIR"
-LOG="$STATE_DIR/motion-player.log"
-
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
-    export DISPLAY=:0
-fi
-export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
-export PYGAME_HIDE_SUPPORT_PROMPT=1
-
-cd "$APP_DIR" || exit 1
-
-# Single instance: file-descriptor flock.
-LOCK="$STATE_DIR/instance.lock"
-exec 9>"$LOCK"
-if ! flock -n 9; then
-    echo "$APP_NAME is already running." >&2
-    exit 0
-fi
-
-# Hide cursor; ignore if unclutter is not installed.
-if command -v unclutter >/dev/null 2>&1; then
-    unclutter -idle 0 -root >/dev/null 2>&1 &
-    UNCLUTTER_PID=$!
-fi
-
-# Disable screen blanking under XWayland.
-if command -v xset >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
-    xset s off -dpms >/dev/null 2>&1 || true
-fi
-
-{
-    echo "=============================================="
-    echo " $APP_NAME"
-    echo " Started : $(date '+%Y-%m-%d %H:%M:%S')"
-    echo " Script  : $PY_SCRIPT"
-    echo "=============================================="
-} >> "$LOG"
-
-if [ "$VERBOSE" = "1" ]; then
-    python3 -u "$PY_SCRIPT" "$@" 2>&1 | tee -a "$LOG"
-    STATUS=${PIPESTATUS[0]}
-else
-    python3 -u "$PY_SCRIPT" "$@" >> "$LOG" 2>&1
-    STATUS=$?
-fi
-
-echo "---- exited with status $STATUS at $(date '+%Y-%m-%d %H:%M:%S') ----" >> "$LOG"
-
-[ -n "${UNCLUTTER_PID:-}" ] && kill "$UNCLUTTER_PID" >/dev/null 2>&1 || true
-
-exit "$STATUS"
-LAUNCHER
+cp "$REPO_ROOT/packaging/motion-player-launcher" "$STAGE/usr/bin/motion-player"
 chmod 0755 "$STAGE/usr/bin/motion-player"
 
 # ---------------------------------------------------------------------------
@@ -208,10 +140,10 @@ chmod 0644 "$STAGE/DEBIAN/conffiles"
 # 9. Package metadata
 # ---------------------------------------------------------------------------
 if [[ "${STRICT_DEPS:-0}" == "1" ]]; then
-    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, ffmpeg, zenity, xdg-utils, unclutter"
+    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
     RECOMMENDS=""
 else
-    DEPENDS="python3, ffmpeg, zenity, xdg-utils, unclutter"
+    DEPENDS="python3, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
     RECOMMENDS="python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame"
 fi
 

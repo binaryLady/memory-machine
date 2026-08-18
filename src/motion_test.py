@@ -102,12 +102,14 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         key = video._cv2.waitKey(1)
         if key != -1:
             key &= 0xFF
+        # q and Esc always quit, whatever the sensor backend. Without this, a
+        # fullscreen window driven by a hardware sensor can only be closed from
+        # another machine or a virtual console.
+        if key in (ord("q"), 27):
+            LOGGER.info("Quit requested from keyboard")
+            break
         if hasattr(sensor, "handle_key"):
-            cmd = sensor.handle_key(key)
-            if cmd == "quit":
-                LOGGER.info("Quit requested from keyboard")
-                break
-            if cmd == "dump":
+            if sensor.handle_key(key) == "dump":
                 LOGGER.info("Status dump: %s", status.snapshot())
 
         # Timer-based transitions (max-engaged timeout, audio end detection).

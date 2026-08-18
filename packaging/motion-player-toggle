@@ -24,22 +24,45 @@ run() {
     systemctl --user "$1" "$SERVICE"
 }
 
+# Launched from the desktop icon there is no terminal, so echoing alone looks
+# like nothing happened. Say so on screen when a notifier is available.
+say() {
+    echo "$1"
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send --app-name="memory-machine" --icon=motion-player "memory-machine" "$1" || true
+    fi
+}
+
+settled_state() {
+    # systemd returns before the engine has opened its window or died.
+    sleep 2
+    if is_active; then
+        echo "running"
+    else
+        echo "not running"
+    fi
+}
+
 case "$ACTION" in
     start)
+        if is_active; then
+            say "memory-machine is already running."
+            exit 0
+        fi
         run start
-        echo "memory-machine started."
+        say "memory-machine started ($(settled_state))."
         ;;
     stop)
         run stop
-        echo "memory-machine stopped."
+        say "memory-machine stopped."
         ;;
     toggle)
         if is_active; then
             run stop
-            echo "memory-machine stopped."
+            say "memory-machine stopped."
         else
             run start
-            echo "memory-machine started."
+            say "memory-machine started ($(settled_state))."
         fi
         ;;
 esac

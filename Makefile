@@ -27,6 +27,7 @@ install:
 lint:
 	find src tests packaging -name '*.py' -exec python3 -m py_compile {} +
 	bash -n packaging/build_deb.sh
+	bash -n packaging/motion-player-launcher
 	bash -n packaging/motion-player-toggle
 	bash -n packaging/motion-player-media
 	bash -n packaging/motion-player-reverse

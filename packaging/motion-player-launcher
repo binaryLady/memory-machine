@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Silent launcher for motion-player. No crash dialogs, no terminal.
+set -uo pipefail
+
+APP_DIR=/opt/motion-player
+PY_SCRIPT="$APP_DIR/motion_test.py"
+APP_NAME="memory-machine"
+
+# Anything that only inspects and exits needs no display, no lock, and no log
+# redirection — run it straight through so the operator sees the output.
+case "${1:-}" in
+    --check-config|--help|-h)
+        exec python3 -u "$PY_SCRIPT" "$@"
+        ;;
+    --log)
+        LOG_PATH="${XDG_STATE_HOME:-$HOME/.local/state}/motion-player/motion-player.log"
+        exec xdg-open "$LOG_PATH" 2>/dev/null || exec cat "$LOG_PATH"
+        ;;
+esac
+
+VERBOSE=0
+case "${1:-}" in
+    --verbose|-v) VERBOSE=1 ;;
+esac
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/motion-player"
+mkdir -p "$STATE_DIR"
+LOG="$STATE_DIR/motion-player.log"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export PYGAME_HIDE_SUPPORT_PROMPT=1
+
+# A user service can start before the compositor exists, in which case there is
+# nowhere to open a window and the piece would fail silently. Find a display,
+# waiting for one if the desktop is still coming up. X11/XWayland is preferred
+# because OpenCV is driven through it here.
+find_display() {
+    local sock
+    if [ -n "${DISPLAY:-}" ] && [ -S "/tmp/.X11-unix/X${DISPLAY#:}" ]; then
+        return 0
+    fi
+    for sock in /tmp/.X11-unix/X*; do
+        if [ -S "$sock" ]; then
+            export DISPLAY=":${sock##*/X}"
+            return 0
+        fi
+    done
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+        return 0
+    fi
+    for sock in "$XDG_RUNTIME_DIR"/wayland-*; do
+        case "$sock" in *.lock) continue ;; esac
+        if [ -S "$sock" ]; then
+            export WAYLAND_DISPLAY="${sock##*/}"
+            unset DISPLAY
+            return 0
+        fi
+    done
+    return 1
+}
+
+WAITED=0
+WAIT_LIMIT="${DISPLAY_WAIT_SECONDS:-90}"
+until find_display; do
+    if [ "$WAITED" -ge "$WAIT_LIMIT" ]; then
+        echo "No display appeared within ${WAIT_LIMIT}s; not starting." >&2
+        exit 1
+    fi
+    sleep 2
+    WAITED=$((WAITED + 2))
+done
+if [ "$WAITED" -gt 0 ]; then
+    echo "Waited ${WAITED}s for a display." >&2
+fi
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+
+cd "$APP_DIR" || exit 1
+
+# Single instance: file-descriptor flock.
+LOCK="$STATE_DIR/instance.lock"
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    echo "$APP_NAME is already running." >&2
+    exit 0
+fi
+
+# Hide cursor; ignore if unclutter is not installed.
+if command -v unclutter >/dev/null 2>&1; then
+    unclutter -idle 0 -root >/dev/null 2>&1 &
+    UNCLUTTER_PID=$!
+fi
+
+# Disable screen blanking under XWayland.
+if command -v xset >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
+    xset s off -dpms >/dev/null 2>&1 || true
+fi
+
+{
+    echo "=============================================="
+    echo " $APP_NAME"
+    echo " Started : $(date '+%Y-%m-%d %H:%M:%S')"
+    echo " Script  : $PY_SCRIPT"
+    echo "=============================================="
+} >> "$LOG"
+
+if [ "$VERBOSE" = "1" ]; then
+    python3 -u "$PY_SCRIPT" "$@" 2>&1 | tee -a "$LOG"
+    STATUS=${PIPESTATUS[0]}
+else
+    python3 -u "$PY_SCRIPT" "$@" >> "$LOG" 2>&1
+    STATUS=$?
+fi
+
+echo "---- exited with status $STATUS at $(date '+%Y-%m-%d %H:%M:%S') ----" >> "$LOG"
+
+[ -n "${UNCLUTTER_PID:-}" ] && kill "$UNCLUTTER_PID" >/dev/null 2>&1 || true
+
+exit "$STATUS"

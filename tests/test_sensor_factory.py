@@ -125,3 +125,27 @@ def test_combine_any_lifts_on_the_first_member() -> None:
     got = drain(events)
     assert [e[0] for e in got] == ["lift"]
     fused.stop()
+
+
+def test_keyboard_sensor_no_longer_owns_quitting() -> None:
+    """The main loop quits for every backend, so the sensor must not claim it."""
+    sensor = KeyboardSensor()
+
+    assert sensor.handle_key(ord("q")) is None
+    assert sensor.handle_key(ord("d")) == "dump"
+
+
+def test_spacebar_toggles_engagement() -> None:
+    import queue
+
+    sensor = KeyboardSensor()
+    events: queue.Queue = queue.Queue()
+    sensor.start(events)
+
+    sensor.handle_key(ord(" "))
+    assert sensor.is_engaged()
+    assert events.get_nowait()[0] == "lift"
+
+    sensor.handle_key(ord(" "))
+    assert not sensor.is_engaged()
+    assert events.get_nowait()[0] == "replace"

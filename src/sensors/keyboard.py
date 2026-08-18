@@ -38,7 +38,10 @@ class KeyboardSensor:
         return self._engaged
 
     def handle_key(self, key: int) -> str | None:
-        """Process a cv2 key code. Returns 'quit' or 'dump' commands, if any."""
+        """Process a cv2 key code. Returns 'dump' if a status dump was asked for.
+
+        Quitting is handled by the main loop for every backend, not here.
+        """
         if key == -1:
             return None
         if key == ord(" "):
@@ -52,8 +55,6 @@ class KeyboardSensor:
             )
             if self._events is not None:
                 self._events.put((event, time.monotonic(), self.name))
-        elif key == ord("q"):
-            return "quit"
         elif key == ord("d"):
             return "dump"
         return None
