@@ -72,16 +72,35 @@ Place the real video and audio files in `~/memory-machine-media`, which the
 desktop shortcut **memory-machine-media** points to:
 
 ```
-~/memory-machine-media/piece.mp4
-~/memory-machine-media/piece.wav
-~/memory-machine-media/piece.reverse.mp4
+~/memory-machine-media/piece.mp4                    always
+~/memory-machine-media/piece.wav                    always
+~/memory-machine-media/piece.reverse.mp4            always
+~/memory-machine-media/piece_portrait.mp4           portrait screens only
+~/memory-machine-media/piece_portrait.reverse.mp4   with the portrait cut
 ```
 
-`piece.reverse.mp4` is a pre-rendered reverse of `piece.mp4`. Build it once,
-whenever the footage changes:
+Every video cut needs its own pre-rendered reverse, because the rewind plays
+that copy forward — a cut without one goes black the moment the headphones are
+lifted. Build them once, whenever the footage changes, one call per cut:
 
 ```bash
 motion-player-reverse
+```
+
+```bash
+motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
+```
+
+For a show, render each cut at the resolution it will actually be displayed at
+instead, which builds the reverse at the same time and removes per-frame scaling
+entirely:
+
+```bash
+motion-player-prepare
+```
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1080x1920
 ```
 
 The rewind plays that file forward, so playback stays sequential and never
