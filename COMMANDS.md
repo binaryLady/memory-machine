@@ -40,8 +40,9 @@ sudo apt install -y --allow-downgrades ./motion-player_*.deb
 
 `make clean` matters: old `.deb` files accumulate in the repo root, and the glob
 hands apt several candidates at once, which it resolves to "nothing to do".
-`--allow-downgrades` covers builds whose version string sorts below what is
-already installed.
+`--allow-downgrades` is only needed once, when coming from a build older than
+1.0.1 — those were versioned by bare commit sha, which dpkg orders essentially
+at random, so a newer build could look like a downgrade.
 
 Either way, finish by putting the media in place and building the reversed
 clip — the engine treats it as required media and will report

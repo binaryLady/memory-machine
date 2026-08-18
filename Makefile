@@ -20,7 +20,9 @@ release:
 	STRICT_DEPS=1 packaging/build_deb.sh
 
 install:
-	sudo apt install ./$(PKG)_*.deb
+	@DEB="$$(ls -t ./$(PKG)_*.deb | head -n1)"; \
+	echo "Installing $$DEB"; \
+	sudo apt install -y "$$DEB"
 
 lint:
 	find src tests packaging -name '*.py' -exec python3 -m py_compile {} +

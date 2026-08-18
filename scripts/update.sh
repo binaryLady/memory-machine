@@ -42,7 +42,8 @@ systemctl --user stop motion-player.service >/dev/null 2>&1 || true
 git pull --ff-only
 
 make release
-sudo apt install --reinstall ./motion-player_*.deb
+DEB="$(ls -t ./motion-player_*.deb | head -n1)"
+sudo apt install --reinstall -y "$DEB"
 
 systemctl --user daemon-reload
 systemctl --user enable motion-player.service

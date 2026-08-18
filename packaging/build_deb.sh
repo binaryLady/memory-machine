@@ -15,10 +15,13 @@ STAGE="$BUILD_ROOT/$PKG"
 OUTDIR="$REPO_ROOT"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 
-# Append git sha for untagged builds.
+# Append a git suffix for untagged builds. The commit count leads because it
+# increases monotonically; a bare sha does not, so dpkg would order builds
+# essentially at random and apt would treat a newer build as a downgrade.
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_COUNT="$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
 if ! git -C "$REPO_ROOT" describe --exact-match --tags "$GIT_SHA" >/dev/null 2>&1; then
-    VERSION="${VERSION}~git${GIT_SHA}"
+    VERSION="${VERSION}~git${GIT_COUNT}.${GIT_SHA}"
 fi
 
 echo "=== Building ${PKG}_${VERSION}_all.deb ==="
@@ -197,7 +200,8 @@ systemctl --user stop motion-player.service >/dev/null 2>&1 || true
 git pull --ff-only
 
 make release
-sudo apt install --reinstall ./motion-player_*.deb
+DEB="$(ls -t ./motion-player_*.deb | head -n1)"
+sudo apt install --reinstall -y "$DEB"
 
 systemctl --user daemon-reload
 systemctl --user enable motion-player.service
