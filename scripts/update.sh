@@ -86,6 +86,20 @@ installed_version() {
     dpkg-query -W -f='${Version}' motion-player 2>/dev/null || echo "none"
 }
 
+expected_version() {
+    # Mirrors how build_deb.sh versions a build, so the installed package can be
+    # compared against what this checkout would produce.
+    local version sha count
+    version="$(tr -d '[:space:]' < VERSION)"
+    sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    if git describe --exact-match --tags "$sha" >/dev/null 2>&1; then
+        echo "$version"
+        return
+    fi
+    count="$(git rev-list --count HEAD 2>/dev/null || echo 0)"
+    echo "${version}~git${count}.${sha}"
+}
+
 is_engaged() {
     local status="$STATE_DIR/status.json"
     [ -f "$status" ] && grep -q '"state"[[:space:]]*:[[:space:]]*"ENGAGED"' "$status"
@@ -149,11 +163,17 @@ if [ "$CHECK" = "1" ]; then
     exit 0
 fi
 
-# A fresh clone can already match the remote while nothing is installed yet,
-# so an up-to-date checkout alone is not reason enough to stop.
-if [ "$LOCAL" = "$REMOTE" ] && [ "$FORCE" = "0" ] && [ "$(installed_version)" != "none" ]; then
-    log "Already up to date ($(installed_version)); nothing to do"
+# An up-to-date checkout is not reason enough to stop: a previous run may have
+# pulled and then failed to install, or rolled back, leaving the checkout ahead
+# of the package. Compare what is installed against what this checkout builds.
+INSTALLED="$(installed_version)"
+EXPECTED="$(expected_version)"
+if [ "$LOCAL" = "$REMOTE" ] && [ "$FORCE" = "0" ] && [ "$INSTALLED" = "$EXPECTED" ]; then
+    log "Already up to date ($INSTALLED); nothing to do"
     exit 0
+fi
+if [ "$LOCAL" = "$REMOTE" ] && [ "$INSTALLED" != "$EXPECTED" ]; then
+    log "Checkout is current but $INSTALLED is installed; rebuilding $EXPECTED"
 fi
 
 if [ "$AUTO" = "1" ] && is_engaged; then

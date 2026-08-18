@@ -643,6 +643,17 @@ above, then check what the Pi settled on:
 wlr-randr
 ```
 
+**`motion-player-update` says "already up to date" but the fix is not there.**
+It compares the installed package against what the checkout would build, so a
+checkout that pulled without installing — a previous run that failed, or a
+rollback — is detected and rebuilt. If it still insists, confirm the two agree:
+
+```bash
+dpkg-query -W -f='${Version}\n' motion-player; cd ~/memory-machine && echo "$(tr -d '[:space:]' < VERSION)~git$(git rev-list --count HEAD).$(git rev-parse --short HEAD)"
+```
+
+`motion-player-update --force` rebuilds and reinstalls regardless.
+
 **The service won't stay up after an update.** The updater now appends the
 `systemctl` status and the tail of the engine log to `update.log`, so the reason
 should be right there:
