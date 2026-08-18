@@ -57,6 +57,15 @@ install_deb() {
     sudo -n /usr/bin/motion-player-install-deb >>"$LOG" 2>&1
 }
 
+report_failure() {
+    {
+        echo "--- systemctl --user status $SERVICE ---"
+        systemctl --user status "$SERVICE" --no-pager -l 2>&1 | tail -20
+        echo "--- last 30 lines of motion-player.log ---"
+        tail -30 "$STATE_DIR/motion-player.log" 2>/dev/null || echo "(no engine log yet)"
+    } | tee -a "$LOG"
+}
+
 usage() {
     cat <<'USAGE'
 motion-player-update — update the installation and restart it.
@@ -168,6 +177,16 @@ else
     git pull --quiet --ff-only
 fi
 
+if [ ! -f "$KEEP" ]; then
+    EXISTING="$(ls -t ./motion-player_*.deb 2>/dev/null | head -n1 || true)"
+    if [ -n "$EXISTING" ]; then
+        cp -f "$EXISTING" "$KEEP"
+        log "Kept $(basename "$EXISTING") as the fallback package"
+    else
+        log "No existing package to keep as a fallback; a failed update cannot be rolled back this time"
+    fi
+fi
+
 make clean >/dev/null
 make release >>"$LOG" 2>&1
 DEB="$(ls -t ./motion-player_*.deb | head -n1)"
@@ -181,13 +200,18 @@ systemctl --user start "$SERVICE"
 
 sleep "$SETTLE_SECONDS"
 
-if systemctl --user is-active --quiet "$SERVICE"; then
+SERVICE_STATE="$(systemctl --user is-active "$SERVICE" 2>/dev/null || true)"
+if [ "$SERVICE_STATE" = "active" ]; then
     cp -f "$DEB" "$KEEP"
     log "Updated to $(installed_version) and running"
     exit 0
 fi
 
-log "ERROR: $SERVICE did not stay up after updating to $(installed_version)"
+log "ERROR: $SERVICE is '$SERVICE_STATE' after updating to $(installed_version)"
+if [ "$SERVICE_STATE" = "activating" ]; then
+    log "That state means it is restarting in a loop, so it exited straight after starting"
+fi
+report_failure
 
 if [ -f "$KEEP" ]; then
     log "Rolling back to $(basename "$KEEP")"
@@ -198,7 +222,8 @@ if [ -f "$KEEP" ]; then
     if systemctl --user is-active --quiet "$SERVICE"; then
         log "Rolled back to $(installed_version) and running"
     else
-        log "ERROR: rollback did not come up either; check motion-player-status"
+        log "ERROR: rollback did not come up either"
+        report_failure
     fi
 else
     log "No known-good package kept yet; cannot roll back automatically"

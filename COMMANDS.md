@@ -444,6 +444,26 @@ above, then check what the Pi settled on:
 wlr-randr
 ```
 
+**The service won't stay up after an update.** The updater now appends the
+`systemctl` status and the tail of the engine log to `update.log`, so the reason
+should be right there:
+
+```bash
+tail -40 ~/.local/state/motion-player/update.log
+```
+
+A state of `activating` means it is restarting in a loop — it exited immediately
+after starting. The most common cause is a leftover copy from a foreground run
+holding the instance lock:
+
+```bash
+pgrep -af motion_test.py
+```
+
+Kill it, then start the service again. After five failures in two minutes the
+unit stops retrying and lands in `failed`, which is deliberate: a silent restart
+loop hides the problem.
+
 **A command appears to do nothing.** The launcher redirects output to the log
 unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
