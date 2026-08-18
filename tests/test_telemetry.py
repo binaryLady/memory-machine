@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import config as config_module
 import status as status_module
+import telemetry
 from pathlib import Path
 from telemetry import Telemetry
 
@@ -159,3 +160,26 @@ def test_telemetry_url_must_be_http_or_https() -> None:
     cfg = config_module.load(str(path))
     problems = config_module.validate(cfg)
     assert any("http:// or https://" in p for p in problems)
+
+
+def test_first_heartbeat_is_not_gated_on_host_uptime(monkeypatch: Any) -> None:
+    """time.monotonic() counts from boot on Linux, so a freshly booted Pi must
+    still emit its first heartbeat rather than waiting out interval_s."""
+    collector: list[dict[str, Any]] = []
+    server = _make_server(collector)
+    url = f"http://127.0.0.1:{server.server_port}/telemetry"
+    cfg = _Config(_TelemetryConfig(enabled=True, endpoint_url=url, interval_s=60,
+                                   batch_size=10, timeout_s=2, log_tail_lines=0))
+
+    real_monotonic = time.monotonic
+    base = real_monotonic()
+    # Pretend the host booted 5 seconds ago, well inside interval_s.
+    monkeypatch.setattr(telemetry.time, "monotonic", lambda: 5.0 + (real_monotonic() - base))
+
+    tel = telemetry.Telemetry(cfg, _fake_status(), None)
+    tel.start()
+    tel.heartbeat()
+    tel.stop()
+    server.shutdown()
+
+    assert [item for item in collector if item.get("event") == "heartbeat"]
