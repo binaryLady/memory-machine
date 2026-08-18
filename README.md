@@ -94,6 +94,11 @@ The installer creates that folder and a desktop shortcut, so you can drag and
 drop files without using a terminal. You can also right-click the
 **memory-machine** icon and choose **Open media folder**.
 
+Driving several screens from an HDMI splitter needs no configuration in the
+app — it mirrors one signal, so the resolutions may differ as long as the aspect
+ratios match. Pin the output mode so the splitter cannot renegotiate it
+mid-show; see **Multiple screens** in [COMMANDS.md](COMMANDS.md).
+
 If you use different file names, edit `/etc/motion-player/config.ini` to point
 elsewhere. The package does not ship media; the app logs a clear "media missing"
 reason and shows a black screen if the files are absent.
