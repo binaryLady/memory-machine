@@ -97,3 +97,40 @@ def apply_mode(configured_display: str, mode: str) -> str:
 
     LOGGER.info("Display %s pinned to %s via %s", connector, mode, cmd[0])
     return f"{connector}@{mode}"
+
+
+def preferred_mode(connector: str, drm_root: Path = DRM_ROOT) -> tuple[int, int] | None:
+    """First mode the sink advertises, which is the one it asks to be driven at."""
+    for modes in sorted(drm_root.glob(f"card*-{connector}/modes")):
+        try:
+            first = modes.read_text().splitlines()
+        except OSError:
+            continue
+        if not first:
+            continue
+        width, _, height = first[0].strip().partition("x")
+        try:
+            return int(width), int(height)
+        except ValueError:
+            continue
+    return None
+
+
+def output_resolution(
+    configured_display: str, configured_mode: str, drm_root: Path = DRM_ROOT
+) -> tuple[int, int] | None:
+    """The screen size, worked out without needing a window to exist yet.
+
+    Media has to be chosen before the window is mapped, so the window cannot be
+    asked. A pinned display_mode is authoritative; otherwise fall back to what
+    the connected sink advertises.
+    """
+    if configured_mode and configured_mode != "auto" and is_valid_mode(configured_mode):
+        size, _, _rate = configured_mode.partition("@")
+        width, _, height = size.partition("x")
+        return int(width), int(height)
+
+    connector = resolve_connector(configured_display, drm_root)
+    if connector is None:
+        return None
+    return preferred_mode(connector, drm_root)

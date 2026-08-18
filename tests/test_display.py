@@ -134,3 +134,44 @@ def test_success_reports_the_pinned_mode(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(display.subprocess, "run", lambda *a, **k: Result())
 
     assert display.apply_mode("HDMI-A-1", "1920x1080@60") == "HDMI-A-1@1920x1080@60"
+
+
+def fake_modes(tmp_path: Path, connector: str, modes: list[str]) -> Path:
+    d = tmp_path / f"card1-{connector}"
+    d.mkdir(exist_ok=True)
+    (d / "status").write_text("connected\n")
+    (d / "modes").write_text("\n".join(modes) + "\n")
+    return tmp_path
+
+
+def test_preferred_mode_is_the_first_line(tmp_path: Path) -> None:
+    root = fake_modes(tmp_path, "HDMI-A-1", ["1920x1080", "1280x720", "640x480"])
+
+    assert display.preferred_mode("HDMI-A-1", root) == (1920, 1080)
+
+
+def test_preferred_mode_is_none_without_a_sink(tmp_path: Path) -> None:
+    assert display.preferred_mode("HDMI-A-1", tmp_path) is None
+
+
+def test_a_pinned_mode_wins_over_the_sink(tmp_path: Path) -> None:
+    """A forced mode is what the Pi will actually output, whatever EDID says."""
+    root = fake_modes(tmp_path, "HDMI-A-1", ["1280x720"])
+
+    assert display.output_resolution("HDMI-A-1", "1080x1920@60", root) == (1080, 1920)
+
+
+def test_the_sink_is_used_when_no_mode_is_pinned(tmp_path: Path) -> None:
+    root = fake_modes(tmp_path, "HDMI-A-1", ["1080x1920"])
+
+    assert display.output_resolution("auto", "auto", root) == (1080, 1920)
+
+
+def test_output_resolution_is_none_when_nothing_is_connected(tmp_path: Path) -> None:
+    assert display.output_resolution("auto", "auto", tmp_path) is None
+
+
+def test_a_malformed_mode_line_is_ignored(tmp_path: Path) -> None:
+    root = fake_modes(tmp_path, "HDMI-A-1", ["not-a-mode"])
+
+    assert display.preferred_mode("HDMI-A-1", root) is None

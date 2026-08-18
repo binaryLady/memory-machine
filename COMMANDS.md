@@ -94,6 +94,29 @@ motion-player-toggle --start
 
 The piece needs three files in `~/memory-machine-media/`:
 
+### A portrait cut
+
+If some screens are mounted vertically, provide a second cut of the piece framed
+for them. The engine picks it whenever the screen is taller than it is wide, and
+falls back to the default cut if it is missing:
+
+```ini
+[media]
+portrait_video_file   = piece_portrait.mp4
+portrait_reverse_file = piece_portrait.reverse.mp4
+```
+
+Both must be set together — a portrait cut needs its own reversed copy, built
+the same way:
+
+```bash
+motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
+```
+
+The screen shape is read from the pinned `display_mode`, or from what the sink
+advertises, before the window is opened. `playback.scaling` still applies to
+whatever difference remains between the cut and the screen.
+
 If no sensor is fitted at all, set `sensor_type = none` in the config. The piece
 then loops forward continuously and never rewinds — no sensor, no audio, no
 reverse, just the footage playing.
@@ -203,6 +226,14 @@ native resolution. Nearly all 720p HDMI TVs accept 1080p and downscale
 internally, but some 1366x768 monitors top out at 1360x768 and will show
 nothing at 1080p. Power each screen on one at a time after the change and check
 that it syncs.
+
+A splitter can only mirror, so a mix of portrait and landscape screens cannot
+each get their own cut from one Pi — the portrait cut is chosen once, from the
+single output mode. Mixed orientations need one Pi per orientation.
+
+`playback.scaling` decides how a frame meets a screen of a different shape:
+`fit` pads with black, `fill` crops to cover, `stretch` distorts. See the
+scaling entry under Troubleshooting.
 
 Then encode `piece.mp4` at exactly the forced mode, so the Pi does no scaling at
 all. Do not master at 4K to serve a 4K screen: the splitter emits one mode

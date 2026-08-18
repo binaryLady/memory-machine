@@ -139,6 +139,8 @@ keys are warned and ignored; missing keys fall back to the default below.
 video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
 audio_file          = piece.wav
 reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
+portrait_video_file   =                ; optional cut for portrait screens
+portrait_reverse_file =                ; its reversed copy; both or neither
 
 [playback]
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black

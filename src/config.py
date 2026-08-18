@@ -23,6 +23,8 @@ class MediaConfig:
     video_file: Path
     audio_file: Path
     reverse_file: Path
+    portrait_video_file: Path | None
+    portrait_reverse_file: Path | None
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "video_file": "piece.mp4",
         "audio_file": "piece.wav",
         "reverse_file": "piece.reverse.mp4",
+        "portrait_video_file": "",
+        "portrait_reverse_file": "",
     },
     "playback": {
         "idle_mode": "hold_first_frame",
@@ -227,6 +231,13 @@ def _resolve_path(value: str) -> Path:
     return MEDIA_DIR / p
 
 
+def _optional_path(value: Any) -> Path | None:
+    """An unset or blank media path means the variant is not provided."""
+    if value is None or not str(value).strip():
+        return None
+    return _resolve_path(str(value).strip())
+
+
 def _parse_i2c_address(value: Any) -> int | None:
     if value is None or str(value).lower() in {"", "none", "false", "0x"}:
         return None
@@ -279,6 +290,8 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             video_file=_resolve_path(str(media_raw.get("video_file", DEFAULTS["media"]["video_file"]))),
             audio_file=_resolve_path(str(media_raw.get("audio_file", DEFAULTS["media"]["audio_file"]))),
             reverse_file=_resolve_path(str(media_raw.get("reverse_file", DEFAULTS["media"]["reverse_file"]))),
+            portrait_video_file=_optional_path(media_raw.get("portrait_video_file")),
+            portrait_reverse_file=_optional_path(media_raw.get("portrait_reverse_file")),
         ),
         playback=PlaybackConfig(
             idle_mode=str(playback_raw.get("idle_mode", DEFAULTS["playback"]["idle_mode"])),
@@ -388,9 +401,18 @@ def validate(config: Config) -> list[str]:
         ("media.video_file", config.media.video_file),
         ("media.audio_file", config.media.audio_file),
         ("media.reverse_file", config.media.reverse_file),
+        ("media.portrait_video_file", config.media.portrait_video_file),
+        ("media.portrait_reverse_file", config.media.portrait_reverse_file),
     ):
-        if not path.exists():
+        if path is not None and not path.exists():
             problems.append(f"{name} not found: {path}")
+
+    portrait = (config.media.portrait_video_file, config.media.portrait_reverse_file)
+    if any(portrait) and not all(portrait):
+        problems.append(
+            "media.portrait_video_file and media.portrait_reverse_file must be set together; "
+            "a portrait clip needs its own reversed copy"
+        )
 
     if config.system.log_max_mb < 1:
         problems.append("system.log_max_mb must be at least 1")

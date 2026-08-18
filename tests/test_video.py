@@ -90,6 +90,8 @@ class FakeMedia:
     video_file: Any
     reverse_file: Any
     audio_file: Any = "piece.wav"
+    portrait_video_file: Any = None
+    portrait_reverse_file: Any = None
 
 
 @dataclass
@@ -364,3 +366,63 @@ def test_the_window_size_is_re_read_rather_than_pinned(
     engine._frames_since_rect_check = 999
 
     assert engine._output_rect() == (1280, 720)
+
+
+def test_a_portrait_screen_selects_the_portrait_cut(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    clip, reverse = make_clips(tmp_path)
+    tall = tmp_path / "piece_portrait.mp4"
+    tall.touch()
+    tall_reverse = tmp_path / "piece_portrait.reverse.mp4"
+    tall_reverse.touch()
+    install_cv2_stub(monkeypatch)
+    import display
+    import video
+
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1080, 1920))
+    engine = video.VideoEngine(
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, portrait_video_file=tall,
+                                             portrait_reverse_file=tall_reverse))
+    )
+
+    assert engine._video_path == tall
+    assert engine._reverse_path == tall_reverse
+
+
+def test_a_landscape_screen_keeps_the_default_cut(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    clip, reverse = make_clips(tmp_path)
+    tall = tmp_path / "piece_portrait.mp4"
+    tall.touch()
+    tall_reverse = tmp_path / "piece_portrait.reverse.mp4"
+    tall_reverse.touch()
+    install_cv2_stub(monkeypatch)
+    import display
+    import video
+
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1920, 1080))
+    engine = video.VideoEngine(
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, portrait_video_file=tall,
+                                             portrait_reverse_file=tall_reverse))
+    )
+
+    assert engine._video_path == clip
+
+
+def test_a_missing_portrait_cut_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A portrait screen with no portrait media must still play something."""
+    clip, reverse = make_clips(tmp_path)
+    install_cv2_stub(monkeypatch)
+    import display
+    import video
+
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1080, 1920))
+    engine = video.VideoEngine(
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse,
+                                             portrait_video_file=tmp_path / "absent.mp4",
+                                             portrait_reverse_file=tmp_path / "absent.rev.mp4"))
+    )
+
+    assert engine._video_path == clip
