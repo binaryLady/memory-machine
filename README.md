@@ -75,8 +75,8 @@ desktop shortcut **memory-machine-media** points to:
 ~/memory-machine-media/piece.mp4                    always
 ~/memory-machine-media/piece.wav                    always
 ~/memory-machine-media/piece.reverse.mp4            always
-~/memory-machine-media/piece_portrait.mp4           portrait screens only
-~/memory-machine-media/piece_portrait.reverse.mp4   with the portrait cut
+~/memory-machine-media/piece_portrait.mp4           one per panel shape
+~/memory-machine-media/piece_portrait.reverse.mp4   with each cut
 ```
 
 Every video cut needs its own pre-rendered reverse, because the rewind plays
@@ -177,8 +177,8 @@ keys are warned and ignored; missing keys fall back to the default below.
 video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
 audio_file          = piece.wav
 reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
-portrait_video_file   =                ; optional cut for portrait screens
-portrait_reverse_file =                ; its reversed copy; both or neither
+cuts                  =                ; alternative cuts, comma separated;
+                                       ; the closest in shape to the screen wins
 
 [playback]
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black

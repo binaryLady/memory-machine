@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from playback_math import compute_reverse_step, compute_scaling
+from playback_math import choose_cut, compute_reverse_step, compute_scaling, reverse_name
 
 
 def test_native_reverse_step_is_one() -> None:
@@ -75,3 +75,58 @@ def test_zero_dimensions_never_plan(mode: str) -> None:
 
 def test_an_unknown_mode_is_ignored() -> None:
     assert compute_scaling(1280, 1280, 1920, 1080, "cover-ish") is None
+
+
+def test_no_cuts_offered_gives_nothing() -> None:
+    assert choose_cut(1920, 1080, []) is None
+
+
+def test_an_unknown_screen_size_gives_nothing() -> None:
+    assert choose_cut(0, 0, [("a.mp4", 720, 720)]) is None
+
+
+@pytest.mark.parametrize(
+    "screen,expected",
+    [
+        ((720, 720), "square.mp4"),
+        ((800, 1280), "portrait.mp4"),
+        ((1280, 800), "wide.mp4"),
+        ((800, 480), "five_three.mp4"),
+        ((1920, 1080), "five_three.mp4"),
+    ],
+)
+def test_each_panel_gets_its_nearest_cut(screen: tuple, expected: str) -> None:
+    """The real fleet: square, portrait, 16:10 and 5:3 panels."""
+    cuts = [
+        ("square.mp4", 720, 720),
+        ("portrait.mp4", 800, 1280),
+        ("wide.mp4", 1280, 800),
+        ("five_three.mp4", 800, 480),
+    ]
+
+    assert choose_cut(screen[0], screen[1], cuts) == expected
+
+
+def test_shape_matters_not_resolution() -> None:
+    """A 720x720 cut suits any square panel, whatever its pixel count."""
+    cuts = [("square.mp4", 720, 720), ("wide.mp4", 1920, 1080)]
+
+    assert choose_cut(2048, 2048, cuts) == "square.mp4"
+
+
+def test_cuts_with_unusable_dimensions_are_ignored() -> None:
+    cuts = [("broken.mp4", 0, 0), ("good.mp4", 800, 1280)]
+
+    assert choose_cut(800, 1280, cuts) == "good.mp4"
+
+
+def test_ties_go_to_the_first_listed() -> None:
+    cuts = [("first.mp4", 720, 720), ("second.mp4", 1080, 1080)]
+
+    assert choose_cut(500, 500, cuts) == "first.mp4"
+
+
+def test_reverse_name_follows_the_tooling_convention() -> None:
+    assert reverse_name("piece_portrait.mp4") == "piece_portrait.reverse.mp4"
+    assert reverse_name("piece.800x1280.mp4") == "piece.800x1280.reverse.mp4"
+    assert reverse_name("noextension") == "noextension.reverse"

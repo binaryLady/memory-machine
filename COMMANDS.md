@@ -126,8 +126,8 @@ The piece needs these files in `~/memory-machine-media/`:
 | `piece.mp4` | the footage, played forward | always |
 | `piece.reverse.mp4` | pre-rendered reverse of it, played during the rewind | always |
 | `piece.wav` | the audio, played forward on lift | always |
-| `piece_portrait.mp4` | a cut framed for vertical screens | only for portrait screens |
-| `piece_portrait.reverse.mp4` | pre-rendered reverse of the portrait cut | with the cut above |
+| `piece_<shape>.mp4` | a cut framed for another screen shape | one per panel shape |
+| `piece_<shape>.reverse.mp4` | pre-rendered reverse of that cut | with each cut |
 
 **Every video file needs its own reversed copy.** The rewind plays that copy
 forward, so a cut without one goes black the moment the headphones are lifted.
@@ -214,28 +214,51 @@ and how many frames missed their deadline. Late frames in any number mean the Pi
 is not keeping up: prepare the media at the output size first, and if it still
 cannot, the source resolution is too high for software decode.
 
-### A portrait cut
+### Cuts for different screens
 
-If some screens are mounted vertically, provide a second cut of the piece framed
-for them. The engine picks it whenever the screen is taller than it is wide, and
-falls back to the default cut if it is missing:
+A piece framed for a square panel does not suit a portrait one. List alternative
+cuts and the engine uses whichever is closest in **shape** to the attached
+screen, so one media folder and one config serve a whole set of panels:
 
 ```ini
 [media]
-portrait_video_file   = piece_portrait.mp4
-portrait_reverse_file = piece_portrait.reverse.mp4
+video_file = piece.mp4
+cuts       = piece_square.mp4, piece_portrait.mp4, piece_wide.mp4
 ```
 
-Both keys must be set together, and both files must exist. Build the reversed
-copy exactly as for the default cut:
+`video_file` competes as a candidate too, so it is the natural home for the
+default framing rather than a special case.
+
+Shape is what matters, not resolution — a 720x720 cut is an equally good match
+for any square panel. Given cuts at 720x720, 800x1280, 1280x800 and 800x480:
+
+| Screen | Cut chosen |
+| --- | --- |
+| 720x720 square panel | 720x720 |
+| 800x1280 portrait panel | 800x1280 |
+| 1280x800 monitor | 1280x800 |
+| 800x480 touchscreen | 800x480 |
+| 1920x1080 projector or TV | 800x480, nearest at 5:3 |
+
+Every cut needs its reversed copy beside it, named the way the tooling writes it
+— `piece_portrait.mp4` needs `piece_portrait.reverse.mp4`. A cut missing one is
+skipped with a logged error rather than chosen, since choosing it would black
+the screen on lift:
 
 ```bash
 motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
 ```
 
+For a show, prepare each cut at the exact resolution of the panel it is for,
+which builds its reverse at the same time and removes per-frame scaling:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
+```
+
 The screen shape is read from the pinned `display_mode`, or from what the sink
-advertises, before the window is opened. `playback.scaling` still applies to
-whatever difference remains between the cut and the screen.
+advertises, before the window is opened. `playback.scaling` still covers
+whatever difference remains between the chosen cut and the screen.
 
 ---
 

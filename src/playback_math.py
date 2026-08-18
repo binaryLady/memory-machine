@@ -95,3 +95,40 @@ def compute_scaling(
 
     LOGGER.warning("Unknown scaling mode %r; leaving the frame alone", mode)
     return None
+
+
+def choose_cut(
+    screen_w: int, screen_h: int, cuts: list[tuple[str, int, int]]
+) -> str | None:
+    """Pick the cut whose shape is closest to the screen's.
+
+    Distance is the ratio between the two aspects, so it is symmetric and cares
+    only about shape: a 720x720 cut is a perfect match for a 720x720 panel and
+    an equally good one for any other square. Ties go to whichever was listed
+    first. Returns None when nothing usable was offered.
+    """
+    if screen_w <= 0 or screen_h <= 0:
+        return None
+
+    screen_aspect = screen_w / screen_h
+    best: str | None = None
+    best_distance = 0.0
+
+    for path, width, height in cuts:
+        if width <= 0 or height <= 0:
+            LOGGER.warning("Ignoring cut with unusable dimensions: %s", path)
+            continue
+        aspect = width / height
+        distance = max(aspect, screen_aspect) / min(aspect, screen_aspect)
+        if best is None or distance < best_distance:
+            best, best_distance = path, distance
+
+    return best
+
+
+def reverse_name(path: str) -> str:
+    """The reversed copy's filename, by the convention the tooling writes."""
+    stem, dot, suffix = path.rpartition(".")
+    if not dot:
+        return path + ".reverse"
+    return f"{stem}.reverse.{suffix}"

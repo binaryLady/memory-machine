@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 import display
-from playback_math import ScalePlan, compute_reverse_step, compute_scaling
+from playback_math import (
+    ScalePlan,
+    choose_cut,
+    compute_reverse_step,
+    compute_scaling,
+    reverse_name,
+)
 
 LOGGER = logging.getLogger("motion-player.video")
 
@@ -41,8 +47,7 @@ class VideoEngine:
         self._config = config.playback
         self._video_path = Path(config.media.video_file)
         self._reverse_path = Path(config.media.reverse_file)
-        self._portrait_video = config.media.portrait_video_file
-        self._portrait_reverse = config.media.portrait_reverse_file
+        self._cuts = tuple(config.media.cuts)
         self._title = "memory-machine"
         self._cap: Any = None
         self._reverse_cap: Any = None
@@ -84,36 +89,59 @@ class VideoEngine:
         self._load()
         self._create_window()
 
+    def _probe_size(self, path: Path) -> tuple[int, int] | None:
+        """Read a clip's dimensions without keeping it open."""
+        cap = self._cv2.VideoCapture(str(path))
+        try:
+            if not cap.isOpened():
+                return None
+            width = int(cap.get(self._cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(self._cv2.CAP_PROP_FRAME_HEIGHT))
+        finally:
+            cap.release()
+        if width <= 0 or height <= 0:
+            return None
+        return width, height
+
     def _select_variant(self) -> None:
-        """Use the portrait cut when the screen is taller than it is wide.
+        """Use whichever cut is closest in shape to the attached screen.
 
         This runs before the window exists, so the screen size comes from the
         pinned mode or the sink itself rather than from the window.
         """
-        if self._portrait_video is None or self._portrait_reverse is None:
+        if not self._cuts:
             return
 
         size = display.output_resolution(self._config.display, self._config.display_mode)
         if size is None:
-            LOGGER.info("Screen size unknown; using the default cut of the piece")
+            LOGGER.info("Screen size unknown; using %s", self._video_path.name)
             return
+
+        candidates: list[tuple[str, int, int]] = []
+        for cut in self._cuts:
+            reverse = Path(reverse_name(str(cut)))
+            if not cut.exists() or not reverse.exists():
+                LOGGER.error("Skipping cut %s: it or its reversed copy is missing", cut.name)
+                continue
+            probed = self._probe_size(cut)
+            if probed is None:
+                LOGGER.error("Skipping cut %s: could not read its dimensions", cut.name)
+                continue
+            candidates.append((str(cut), probed[0], probed[1]))
+
+        default = self._probe_size(self._video_path)
+        if default is not None:
+            candidates.append((str(self._video_path), default[0], default[1]))
 
         width, height = size
-        if height <= width:
-            LOGGER.info("Screen is %dx%d; using the default cut of the piece", width, height)
+        chosen = choose_cut(width, height, candidates)
+        if chosen is None or chosen == str(self._video_path):
+            LOGGER.info("Screen is %dx%d; using %s", width, height, self._video_path.name)
             return
 
-        missing = [p for p in (self._portrait_video, self._portrait_reverse) if not p.exists()]
-        if missing:
-            LOGGER.error(
-                "Screen is portrait but %s is missing; using the default cut",
-                ", ".join(str(p) for p in missing),
-            )
-            return
-
-        LOGGER.info("Screen is %dx%d (portrait); using %s", width, height, self._portrait_video)
-        self._video_path = Path(self._portrait_video)
-        self._reverse_path = Path(self._portrait_reverse)
+        self._video_path = Path(chosen)
+        self._reverse_path = Path(reverse_name(chosen))
+        LOGGER.info("Screen is %dx%d; using the closest cut %s", width, height, self._video_path.name)
 
     def _open(self, path: Path, label: str) -> Any:
         if not path.exists():

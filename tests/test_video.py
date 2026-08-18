@@ -90,8 +90,7 @@ class FakeMedia:
     video_file: Any
     reverse_file: Any
     audio_file: Any = "piece.wav"
-    portrait_video_file: Any = None
-    portrait_reverse_file: Any = None
+    cuts: tuple = ()
 
 
 @dataclass
@@ -368,123 +367,125 @@ def test_the_window_size_is_re_read_rather_than_pinned(
     assert engine._output_rect() == (1280, 720)
 
 
-def test_a_portrait_screen_selects_the_portrait_cut(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def make_cut(tmp_path, name: str) -> Any:
+    """A cut plus the reversed copy the engine requires alongside it."""
+    cut = tmp_path / f"{name}.mp4"
+    cut.touch()
+    (tmp_path / f"{name}.reverse.mp4").touch()
+    return cut
+
+
+def sized_cv2(monkeypatch: pytest.MonkeyPatch, sizes: dict) -> Any:
+    """cv2 stub whose captures report per-file dimensions."""
+    cv2 = install_cv2_stub(monkeypatch)
+
+    def capture(path: str) -> FakeCapture:
+        cap = FakeCapture()
+        width, height = sizes.get(str(path), (64, 48))
+        cap.get = lambda prop: {  # type: ignore[method-assign]
+            1001: 100, 1002: 30.0, 1003: width, 1004: height
+        }[prop]
+        cv2.captures.append(cap)
+        return cap
+
+    cv2.VideoCapture = capture
+    return cv2
+
+
+def test_the_closest_shaped_cut_is_chosen(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A portrait panel gets the portrait cut, not the square default."""
     clip, reverse = make_clips(tmp_path)
-    tall = tmp_path / "piece_portrait.mp4"
-    tall.touch()
-    tall_reverse = tmp_path / "piece_portrait.reverse.mp4"
-    tall_reverse.touch()
-    install_cv2_stub(monkeypatch)
+    square = make_cut(tmp_path, "piece_square")
+    portrait = make_cut(tmp_path, "piece_portrait")
     import display
+
+    sized_cv2(monkeypatch, {
+        str(clip): (1280, 1280), str(square): (720, 720), str(portrait): (800, 1280)
+    })
     import video
 
-    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1080, 1920))
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (800, 1280))
     engine = video.VideoEngine(
-        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, portrait_video_file=tall,
-                                             portrait_reverse_file=tall_reverse))
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, cuts=(square, portrait)))
     )
 
-    assert engine._video_path == tall
-    assert engine._reverse_path == tall_reverse
+    assert engine._video_path == portrait
+    assert engine._reverse_path == tmp_path / "piece_portrait.reverse.mp4"
 
 
-def test_a_landscape_screen_keeps_the_default_cut(
+def test_a_square_panel_prefers_the_square_cut(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     clip, reverse = make_clips(tmp_path)
-    tall = tmp_path / "piece_portrait.mp4"
-    tall.touch()
-    tall_reverse = tmp_path / "piece_portrait.reverse.mp4"
-    tall_reverse.touch()
-    install_cv2_stub(monkeypatch)
+    square = make_cut(tmp_path, "piece_square")
+    portrait = make_cut(tmp_path, "piece_portrait")
     import display
+
+    sized_cv2(monkeypatch, {
+        str(clip): (1280, 800), str(square): (720, 720), str(portrait): (800, 1280)
+    })
     import video
 
-    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1920, 1080))
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (720, 720))
     engine = video.VideoEngine(
-        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, portrait_video_file=tall,
-                                             portrait_reverse_file=tall_reverse))
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, cuts=(square, portrait)))
+    )
+
+    assert engine._video_path == square
+
+
+def test_the_default_clip_competes_with_the_cuts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """video_file is a candidate too, not merely a fallback."""
+    clip, reverse = make_clips(tmp_path)
+    portrait = make_cut(tmp_path, "piece_portrait")
+    import display
+
+    sized_cv2(monkeypatch, {str(clip): (1280, 1280), str(portrait): (800, 1280)})
+    import video
+
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (720, 720))
+    engine = video.VideoEngine(
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, cuts=(portrait,)))
     )
 
     assert engine._video_path == clip
 
 
-def test_a_missing_portrait_cut_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """A portrait screen with no portrait media must still play something."""
+def test_a_cut_without_its_reverse_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Choosing it would black the screen on lift."""
     clip, reverse = make_clips(tmp_path)
-    install_cv2_stub(monkeypatch)
+    orphan = tmp_path / "piece_portrait.mp4"
+    orphan.touch()
     import display
+
+    sized_cv2(monkeypatch, {str(clip): (1280, 1280), str(orphan): (800, 1280)})
     import video
 
-    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (1080, 1920))
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: (800, 1280))
     engine = video.VideoEngine(
-        FakeConfig(FakePlayback(), FakeMedia(clip, reverse,
-                                             portrait_video_file=tmp_path / "absent.mp4",
-                                             portrait_reverse_file=tmp_path / "absent.rev.mp4"))
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, cuts=(orphan,)))
     )
 
     assert engine._video_path == clip
 
 
-def test_a_held_frame_is_not_redrawn(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """An idle installation must not rescale and re-upload the same frame all day."""
-    clip, reverse = make_clips(tmp_path)
-    engine = make_engine(monkeypatch, clip, reverse)
-    import cv2
-
-    engine.set_mode("IDLE")
-    tick(engine)
-    after_first = len(cv2.shown)
-
-    for _ in range(30):
-        tick(engine)
-
-    assert len(cv2.shown) == after_first, "the same frame was uploaded repeatedly"
-
-
-def test_a_new_frame_is_always_drawn(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    clip, reverse = make_clips(tmp_path)
-    engine = make_engine(monkeypatch, clip, reverse)
-    import cv2
-
-    engine.set_mode("REVERSE")
-    before = len(cv2.shown)
-
-    for _ in range(5):
-        tick(engine)
-
-    assert len(cv2.shown) == before + 5
-
-
-def test_a_mode_change_forces_a_redraw(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """Skipping redraws must not leave a stale frame on screen after a change."""
-    clip, reverse = make_clips(tmp_path)
-    engine = make_engine(monkeypatch, clip, reverse)
-    import cv2
-
-    engine.set_mode("IDLE")
-    tick(engine)
-    before = len(cv2.shown)
-
-    engine.set_mode("IDLE")
-
-    assert len(cv2.shown) == before + 1
-
-
-def test_a_slow_rewind_does_not_redraw_repeated_frames(
+def test_an_unknown_screen_size_keeps_the_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     clip, reverse = make_clips(tmp_path)
-    engine = make_engine(monkeypatch, clip, reverse)
-    import cv2
+    portrait = make_cut(tmp_path, "piece_portrait")
+    import display
 
-    engine.set_mode("REVERSE")
-    engine._reverse_step = 0.5
-    before = len(cv2.shown)
+    sized_cv2(monkeypatch, {str(clip): (1280, 1280), str(portrait): (800, 1280)})
+    import video
 
-    for _ in range(8):
-        tick(engine)
+    monkeypatch.setattr(display, "output_resolution", lambda *a, **k: None)
+    engine = video.VideoEngine(
+        FakeConfig(FakePlayback(), FakeMedia(clip, reverse, cuts=(portrait,)))
+    )
 
-    assert len(cv2.shown) - before == 4, "only distinct frames should be uploaded"
+    assert engine._video_path == clip

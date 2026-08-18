@@ -9,6 +9,7 @@ import re
 import urllib.parse
 
 import display
+import playback_math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -23,8 +24,7 @@ class MediaConfig:
     video_file: Path
     audio_file: Path
     reverse_file: Path
-    portrait_video_file: Path | None
-    portrait_reverse_file: Path | None
+    cuts: tuple[Path, ...]
 
 
 @dataclass(frozen=True)
@@ -114,8 +114,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "video_file": "piece.mp4",
         "audio_file": "piece.wav",
         "reverse_file": "piece.reverse.mp4",
-        "portrait_video_file": "",
-        "portrait_reverse_file": "",
+        "cuts": "",
     },
     "playback": {
         "idle_mode": "hold_first_frame",
@@ -231,11 +230,11 @@ def _resolve_path(value: str) -> Path:
     return MEDIA_DIR / p
 
 
-def _optional_path(value: Any) -> Path | None:
-    """An unset or blank media path means the variant is not provided."""
+def _path_list(value: Any) -> tuple[Path, ...]:
+    """Comma-separated media paths; blank means none were offered."""
     if value is None or not str(value).strip():
-        return None
-    return _resolve_path(str(value).strip())
+        return ()
+    return tuple(_resolve_path(part.strip()) for part in str(value).split(",") if part.strip())
 
 
 def _parse_i2c_address(value: Any) -> int | None:
@@ -290,8 +289,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             video_file=_resolve_path(str(media_raw.get("video_file", DEFAULTS["media"]["video_file"]))),
             audio_file=_resolve_path(str(media_raw.get("audio_file", DEFAULTS["media"]["audio_file"]))),
             reverse_file=_resolve_path(str(media_raw.get("reverse_file", DEFAULTS["media"]["reverse_file"]))),
-            portrait_video_file=_optional_path(media_raw.get("portrait_video_file")),
-            portrait_reverse_file=_optional_path(media_raw.get("portrait_reverse_file")),
+            cuts=_path_list(media_raw.get("cuts")),
         ),
         playback=PlaybackConfig(
             idle_mode=str(playback_raw.get("idle_mode", DEFAULTS["playback"]["idle_mode"])),
@@ -401,18 +399,20 @@ def validate(config: Config) -> list[str]:
         ("media.video_file", config.media.video_file),
         ("media.audio_file", config.media.audio_file),
         ("media.reverse_file", config.media.reverse_file),
-        ("media.portrait_video_file", config.media.portrait_video_file),
-        ("media.portrait_reverse_file", config.media.portrait_reverse_file),
     ):
-        if path is not None and not path.exists():
+        if not path.exists():
             problems.append(f"{name} not found: {path}")
 
-    portrait = (config.media.portrait_video_file, config.media.portrait_reverse_file)
-    if any(portrait) and not all(portrait):
-        problems.append(
-            "media.portrait_video_file and media.portrait_reverse_file must be set together; "
-            "a portrait clip needs its own reversed copy"
-        )
+    for cut in config.media.cuts:
+        if not cut.exists():
+            problems.append(f"media.cuts entry not found: {cut}")
+            continue
+        reverse = Path(playback_math.reverse_name(str(cut)))
+        if not reverse.exists():
+            problems.append(
+                f"media.cuts entry {cut.name} has no reversed copy at {reverse.name}; "
+                "build it with motion-player-reverse"
+            )
 
     if config.system.log_max_mb < 1:
         problems.append("system.log_max_mb must be at least 1")
