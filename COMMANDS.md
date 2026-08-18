@@ -667,6 +667,18 @@ loop hides the problem.
 unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
 
+**Lifting the headphones does nothing, and the log mentions `.lgd-nfy`.**
+lgpio creates its notification FIFOs in the process's working directory, so a
+read-only one makes every GPIO backend fail — reported as a bare
+`[Errno 2] No such file or directory: '.lgd-nfy-3'`, or as `BadPinFactory` if
+the underlying error is swallowed. The engine now runs from its state directory
+for exactly this reason. If you invoke it by hand, do so from somewhere
+writable:
+
+```bash
+cd ~ && python3 /opt/motion-player/motion_test.py --verbose
+```
+
 **Lifting the headphones does nothing, and the log says `BadPinFactory`.**
 gpiozero could not load a GPIO backend, so there is no sensor. The piece keeps
 running: it loops forward instead of holding a still frame, and `space` still
