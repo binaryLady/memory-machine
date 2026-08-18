@@ -28,7 +28,11 @@ mkdir -p "$MEDIA_DIR"
 # Install build and runtime dependencies.
 sudo apt update
 sudo apt install -y dpkg-dev python3 python3-pip ffmpeg zenity xdg-utils unclutter libnotify-bin git
-sudo apt install -y python3-opencv python3-gpiozero python3-lgpio python3-pygame || true
+# One at a time: a single unavailable package must not skip the rest, and a
+# missing GPIO backend is worth saying out loud rather than swallowing.
+for pkg in python3-opencv python3-gpiozero python3-lgpio python3-pygame; do
+    sudo apt install -y "$pkg" || echo "WARNING: could not install $pkg"
+done
 
 # Build and install the package.
 make release

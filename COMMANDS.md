@@ -468,6 +468,29 @@ loop hides the problem.
 unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
 
+**Lifting the headphones does nothing, and the log says `BadPinFactory`.**
+gpiozero could not load a GPIO backend, so there is no sensor. The piece still
+plays and falls back to the keyboard backend, so `space` triggers it by hand
+while you sort the hardware out. Check which backend gpiozero finds:
+
+```bash
+python3 -c "from gpiozero import Device; Device.ensure_pin_factory(); print(Device.pin_factory)"
+```
+
+If that raises, install the backend and confirm this account may reach the GPIO
+character devices:
+
+```bash
+sudo apt install -y python3-lgpio
+```
+
+```bash
+ls -l /dev/gpiochip*; id -nG | tr ' ' '\n' | grep -qx gpio && echo "in the gpio group" || echo "NOT in the gpio group"
+```
+
+Adding yourself to the group needs a fresh login to take effect:
+`sudo usermod -aG gpio "$USER"`.
+
 **No audio.** Confirm the mixer opened and which sink it picked:
 
 ```bash
