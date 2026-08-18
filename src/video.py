@@ -231,6 +231,17 @@ class VideoEngine:
             LOGGER.error("cv2.imshow failed: %s", exc)
 
     @property
+    def rewind_duration_s(self) -> float:
+        """How long a full rewind takes at the current reverse rate.
+
+        Each frame interval advances reverse_step frames, so covering the clip
+        takes frame_count / reverse_step intervals of 1/fps each.
+        """
+        if self._frame_count <= 0 or self._fps <= 0 or self._reverse_step <= 0:
+            return 0.0
+        return self._frame_count / (self._reverse_step * self._fps)
+
+    @property
     def display_mode(self) -> str:
         return self._display_mode
 

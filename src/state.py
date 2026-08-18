@@ -88,12 +88,15 @@ class StateMachine:
     def _on_engaged_video_at_start(self, now: float) -> None:
         action = self._config.playback.on_rewind_end
         if action == "hold":
+            # The picture has stopped, so the sound stops with it rather than
+            # playing on over a black screen.
+            self._audio.fade_out(self._config.audio.fade_out_ms)
             self._video.set_mode("BLACK")
         elif action == "loop_reverse":
             self._video.set_mode("REVERSE")
         elif action == "resume_forward":
             self._video.set_mode("FORWARD")
-        # State remains ENGAGED; audio continues.
+        # State remains ENGAGED; audio continues wherever the picture does.
 
     def _on_engaged_audio_end(self, now: float) -> None:
         action = self._config.audio.on_audio_end
