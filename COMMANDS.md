@@ -441,6 +441,18 @@ Follow the log live:
 tail -f ~/.local/state/motion-player/motion-player.log
 ```
 
+That is the engine's own log, and the one worth reading. The launcher keeps a
+separate `motion-player-launcher.log` beside it holding start banners, exit
+statuses, and raw output from the graphics and audio libraries — useful when the
+engine dies before it can log anything itself.
+
+Pass `grep -a` when searching either file. Library output can contain control
+bytes, and without it grep reports "binary file matches" and stops reading:
+
+```bash
+grep -a -iE "pin factory|could not start" ~/.local/state/motion-player/motion-player.log | tail -5
+```
+
 Open it in the desktop text editor:
 
 ```bash
