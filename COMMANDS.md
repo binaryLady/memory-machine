@@ -94,6 +94,34 @@ motion-player-toggle --start
 
 The piece needs three files in `~/memory-machine-media/`:
 
+### Preparing media for a show
+
+For an installation that loops all day, render the piece at the screen's own
+resolution once rather than scaling every frame on the Pi:
+
+```bash
+motion-player-prepare
+```
+
+That reads the screen's reported mode, renders `piece.<WxH>.mp4` and its
+reversed copy, and prints the config lines to paste. Pass `--size 1920x1080` to
+be explicit, or `--mode fill` to cover the screen instead of padding it.
+
+Once the media matches the output exactly the engine skips scaling entirely, and
+playback becomes decode and upload with nothing in between. That is the single
+biggest thing you can do for smooth continuous playback on a Pi.
+
+Check what playback is actually achieving:
+
+```bash
+grep Playback ~/.local/state/motion-player/motion-player.log | tail -5
+```
+
+Each line reports achieved frame rate against target, mean and worst frame time,
+and how many frames missed their deadline. Late frames in any number mean the Pi
+is not keeping up: prepare the media at the output size first, and if it still
+cannot, the source resolution is too high for software decode.
+
 ### A portrait cut
 
 If some screens are mounted vertically, provide a second cut of the piece framed
@@ -417,8 +445,10 @@ next run. To stop:
 motion-player-update --disable-auto
 ```
 
-Unattended runs still need to install a package, which needs root. The command
-prints the one-line `sudoers` rule to allow that without a password — it grants
+Unattended runs still need to install a package, which needs root. That is done
+by `motion-player-install-deb`, which takes no arguments so it can hold a single
+fixed rule rather than a wildcard over `apt`. The command prints the one-line
+`sudoers` rule to allow that without a password — it grants
 this account passwordless root for the install helper, which is effectively root
 access, so it is opt-in. Without it the timer will fetch and build but fail at
 the install step; use the menu's **Update** action instead if you would rather

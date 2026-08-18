@@ -23,10 +23,20 @@ You can also right-click the icon and choose **Start** or **Stop**.
    **memory-machine** icon and choose **Open media folder**). If neither is
    there, the folder itself is `memory-machine-media` in the home folder.
 3. Replace `piece.mp4` and `piece.wav` by dragging in the new files.
-4. Right-click the **memory-machine** icon and choose **Start**.
+4. **Ask a technician to rebuild the reverse clip.** The piece plays a
+   pre-rendered reversed copy of the video, and new footage needs a new one.
+   Until that is done the image goes black when the headphones are lifted.
+5. Right-click the **memory-machine** icon and choose **Start**.
 
 If the files have different names, a technician will need to edit
 `/etc/motion-player/config.ini`.
+
+## If the image loops on its own
+
+If the video plays over and over without anyone touching the headphones, the
+sensor is not being detected. The piece keeps running deliberately so the wall
+is never blank — but tell a technician, because lifting the headphones will do
+nothing until it is fixed.
 
 ## If the screen is black
 
@@ -52,6 +62,10 @@ Sonia Cook-Broen — sonia@thetechmargin.com
 
 ## Technician's appendix
 
+- After swapping media, run `motion-player-prepare` (or `motion-player-reverse`)
+  and restart the service.
+- A black image only while the headphones are lifted means the reverse clip is
+  missing or stale.
 - Sensor type wired: **\*\*\*\***\_\_\_**\*\*\*\***
 - GPIO pin: **\*\*\*\***\_\_\_**\*\*\*\***
 - The sensor at the headphone stand is the only hardware to check if lifts are

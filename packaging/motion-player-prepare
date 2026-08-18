@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# motion-player-prepare: render the piece at the screen's own resolution.
+#
+# Scaling every frame on a Pi costs more than a continuously looping
+# installation can afford. Doing it once here means playback is a straight
+# decode and upload: the engine skips scaling entirely when the media already
+# matches the output.
+set -euo pipefail
+
+MEDIA_DIR="${MEDIA_DIR:-$HOME/memory-machine-media}"
+SRC=""
+SIZE=""
+MODE="fit"
+CRF="${CRF:-18}"
+PRESET="${PRESET:-medium}"
+
+usage() {
+    cat <<'USAGE'
+motion-player-prepare — render the piece at the screen's resolution.
+
+  motion-player-prepare [SRC] [--size 1920x1080] [--mode fit|fill]
+
+  SRC      source clip (default: piece.mp4 in the media folder)
+  --size   target resolution (default: what the connected screen reports)
+  --mode   fit  keep the whole frame, pad with black (default)
+           fill cover the screen, crop the overflow
+
+Writes SRC.<WxH>.mp4 and its reversed copy, then prints the config lines.
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --size) SIZE="${2:-}"; shift 2 ;;
+        --mode) MODE="${2:-}"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+        *) SRC="$1"; shift ;;
+    esac
+done
+
+SRC="${SRC:-$MEDIA_DIR/piece.mp4}"
+
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "ffmpeg is not installed. Run: sudo apt install -y ffmpeg" >&2
+    exit 1
+fi
+if [ ! -f "$SRC" ]; then
+    echo "Source clip not found: $SRC" >&2
+    exit 1
+fi
+
+if [ -z "$SIZE" ]; then
+    for modes in /sys/class/drm/card*-HDMI-A-*/modes; do
+        [ -s "$modes" ] || continue
+        SIZE="$(head -n1 "$modes")"
+        echo "Using the screen's reported mode: $SIZE"
+        break
+    done
+fi
+if ! printf '%s' "$SIZE" | grep -qE '^[0-9]+x[0-9]+$'; then
+    echo "Could not determine a target size. Pass --size 1920x1080." >&2
+    exit 2
+fi
+
+WIDTH="${SIZE%x*}"
+HEIGHT="${SIZE#*x}"
+
+case "$MODE" in
+    fit)
+        VF="scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:black"
+        ;;
+    fill)
+        VF="scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}"
+        ;;
+    *)
+        echo "Mode must be fit or fill; got '$MODE'" >&2
+        exit 2
+        ;;
+esac
+
+STEM="${SRC%.*}"
+OUT="${STEM}.${SIZE}.mp4"
+REVERSE="${STEM}.${SIZE}.reverse.mp4"
+
+echo "Rendering $SRC at ${SIZE} (${MODE})..."
+ffmpeg -nostdin -v error -y -i "$SRC" -an -vf "$VF" \
+    -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+
+echo "Building the reversed copy..."
+motion-player-reverse "$OUT" "$REVERSE"
+
+cat <<EOF
+
+Done. Point the config at these:
+
+  [media]
+  video_file   = $(basename "$OUT")
+  reverse_file = $(basename "$REVERSE")
+
+  [playback]
+  scaling      = ${MODE}
+
+The media now matches the output exactly, so playback does no scaling at all.
+EOF

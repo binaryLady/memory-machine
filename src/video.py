@@ -76,6 +76,8 @@ class VideoEngine:
         self._timing_total_s = 0.0
         self._timing_worst_s = 0.0
         self._timing_late = 0
+        self._last_source: Any = None
+        self._force_redraw = True
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._select_variant()
@@ -217,6 +219,7 @@ class VideoEngine:
         if mode != self._mode:
             LOGGER.info("Video mode -> %s", mode)
         self._mode = mode
+        self._force_redraw = True
 
         if mode == "REVERSE":
             self._current_index = float(max(self._frame_count - 1, 0))
@@ -277,6 +280,7 @@ class VideoEngine:
         if self._fullscreen_settled or self._fullscreen_attempts >= _FULLSCREEN_ATTEMPTS:
             return
         self._fullscreen_attempts += 1
+        self._force_redraw = True
         try:
             self._cv2.setWindowProperty(
                 self._title, self._cv2.WND_PROP_FULLSCREEN, self._cv2.WINDOW_FULLSCREEN
@@ -324,6 +328,7 @@ class VideoEngine:
         if (width, height) != self._output_size:
             LOGGER.info("Output surface %dx%d, scaling=%s", width, height, self._scaling)
             self._output_size = (width, height)
+            self._force_redraw = True
         return self._output_size
 
     def _scale(self, frame: Any) -> Any:
@@ -360,12 +365,21 @@ class VideoEngine:
         if frame is None:
             self._render_black()
             return
+        # A held frame, or a reverse_step below 1.0, presents the same frame
+        # repeatedly. Scaling and uploading it again changes nothing on screen,
+        # and an installation spends most of its life idle on one frame.
+        if frame is self._last_source and not self._force_redraw:
+            return
         try:
             self._cv2.imshow(self._title, self._scale(frame))
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("cv2.imshow failed: %s", exc)
+            return
+        self._last_source = frame
+        self._force_redraw = False
 
     def _render_black(self) -> None:
+        self._last_source = None
         if self._black_frame is None:
             width = self._width or 1920
             height = self._height or 1080
