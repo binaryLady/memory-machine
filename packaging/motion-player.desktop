@@ -10,7 +10,7 @@ Terminal=false
 Categories=AudioVideo;Video;Player;
 Keywords=gpio;sensor;motion;video;raspberry;
 StartupNotify=true
-Actions=Start;Stop;OpenMediaFolder;Debug;ViewLog;
+Actions=Start;Stop;Update;OpenMediaFolder;Debug;ViewLog;
 
 [Desktop Action Start]
 Name=Start
@@ -19,6 +19,10 @@ Exec=/usr/bin/motion-player-toggle --start
 [Desktop Action Stop]
 Name=Stop
 Exec=/usr/bin/motion-player-toggle --stop
+
+[Desktop Action Update]
+Name=Update
+Exec=lxterminal --title="memory-machine (update)" -e /usr/bin/motion-player-update
 
 [Desktop Action OpenMediaFolder]
 Name=Open media folder

@@ -106,13 +106,16 @@ reason and shows a black screen if the files are absent.
 ## Update from the Pi
 
 ```bash
-/usr/bin/motion-player-update        # pull, rebuild, reinstall, restart
-/usr/bin/motion-player-update --check
-/usr/bin/motion-player-update --force # discard local changes, if any
+motion-player-update                 # fetch, rebuild, reinstall, restart
+motion-player-update --check         # is anything waiting?
+motion-player-update --force         # discard local changes, if any
+motion-player-update --enable-auto   # nightly, outside gallery hours
 ```
 
-If the checkout is not a git repo (e.g. installed from a release `.deb`), the
-script prints a friendly message instead of failing.
+The checkout is cloned automatically if there isn't one, so this works on a Pi
+installed straight from a `.deb`. If the service fails to stay up after an
+update, the previous package is reinstalled and the piece keeps running. See
+**Updating** in [COMMANDS.md](COMMANDS.md) for the automatic-update tradeoffs.
 
 ## Status over SSH
 

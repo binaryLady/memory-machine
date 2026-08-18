@@ -1,0 +1,8 @@
+[Unit]
+Description=memory-machine unattended update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/motion-player-update --auto

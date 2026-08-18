@@ -15,10 +15,13 @@ STAGE="$BUILD_ROOT/$PKG"
 OUTDIR="$REPO_ROOT"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 
-# Append git sha for untagged builds.
+# Append a git suffix for untagged builds. The commit count leads because it
+# increases monotonically; a bare sha does not, so dpkg would order builds
+# essentially at random and apt would treat a newer build as a downgrade.
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_COUNT="$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
 if ! git -C "$REPO_ROOT" describe --exact-match --tags "$GIT_SHA" >/dev/null 2>&1; then
-    VERSION="${VERSION}~git${GIT_SHA}"
+    VERSION="${VERSION}~git${GIT_COUNT}.${GIT_SHA}"
 fi
 
 echo "=== Building ${PKG}_${VERSION}_all.deb ==="
@@ -153,59 +156,11 @@ exec python3 /opt/motion-player/status.py "$@"
 STATUS
 chmod 0755 "$STAGE/usr/bin/motion-player-status"
 
-cat > "$STAGE/usr/bin/motion-player-update" <<'UPDATE'
-#!/usr/bin/env bash
-set -euo pipefail
-
-REPO="${MOTION_PLAYER_REPO:-$HOME/memory-machine}"
-FORCE=0
-CHECK=0
-
-for arg in "$@"; do
-    case "$arg" in
-        --force) FORCE=1 ;;
-        --check) CHECK=1 ;;
-    esac
-done
-
-if [ ! -d "$REPO/.git" ]; then
-    echo "Not running from a git checkout. Install a newer .deb release instead."
-    exit 0
-fi
-
-cd "$REPO"
-
-if [ "$CHECK" = "1" ]; then
-    git fetch --quiet
-    LOCAL=$(git rev-parse HEAD)
-    REMOTE=$(git rev-parse @{u})
-    if [ "$LOCAL" = "$REMOTE" ]; then
-        echo "Already up to date."
-    else
-        echo "Update available: $REMOTE"
-    fi
-    exit 0
-fi
-
-if [ "$FORCE" = "0" ] && ! git diff-index --quiet HEAD; then
-    echo "Checkout has local changes. Use --force to discard, or commit them."
-    exit 1
-fi
-
-systemctl --user stop motion-player.service >/dev/null 2>&1 || true
-
-git pull --ff-only
-
-make release
-sudo apt install --reinstall ./motion-player_*.deb
-
-systemctl --user daemon-reload
-systemctl --user enable motion-player.service
-systemctl --user start motion-player.service
-
-echo "Updated and restarted."
-UPDATE
+cp "$REPO_ROOT/scripts/update.sh" "$STAGE/usr/bin/motion-player-update"
 chmod 0755 "$STAGE/usr/bin/motion-player-update"
+
+cp "$REPO_ROOT/packaging/motion-player-install-deb" "$STAGE/usr/bin/motion-player-install-deb"
+chmod 0755 "$STAGE/usr/bin/motion-player-install-deb"
 
 cp "$REPO_ROOT/packaging/motion-player-toggle" "$STAGE/usr/bin/motion-player-toggle"
 chmod 0755 "$STAGE/usr/bin/motion-player-toggle"
@@ -221,6 +176,11 @@ chmod 0755 "$STAGE/usr/bin/motion-player-reverse"
 # ---------------------------------------------------------------------------
 cp "$REPO_ROOT/packaging/motion-player.service" "$STAGE/usr/lib/systemd/user/motion-player.service"
 chmod 0644 "$STAGE/usr/lib/systemd/user/motion-player.service"
+
+for unit in motion-player-update.service motion-player-update.timer; do
+    cp "$REPO_ROOT/packaging/$unit" "$STAGE/usr/lib/systemd/user/$unit"
+    chmod 0644 "$STAGE/usr/lib/systemd/user/$unit"
+done
 
 # ---------------------------------------------------------------------------
 # 7. Desktop entry
