@@ -53,7 +53,7 @@ class StateMachine:
         self._video.set_mode("REVERSE")
         video_start = time.monotonic()
         LOGGER.info(
-            "Lift handled audio_delta_ms=%.3f",
+            "Lift handled dispatch_ms=%.3f",
             (video_start - audio_start) * 1000,
         )
         self._state = ENGAGED
@@ -78,7 +78,7 @@ class StateMachine:
         self._video.set_mode("REVERSE")
         video_start = time.monotonic()
         LOGGER.info(
-            "Re-lift handled audio_delta_ms=%.3f",
+            "Re-lift handled dispatch_ms=%.3f",
             (video_start - audio_start) * 1000,
         )
         self._engaged_at = now

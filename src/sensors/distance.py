@@ -20,8 +20,10 @@ class DistanceSensor(Sensor):
     """Distance-based presence sensor with median filtering and hysteresis."""
 
     def __init__(self, config: Any) -> None:
+        # Raw "engaged" here means an object is nearer than threshold_cm, so the
+        # default engaged_when=open maps a cradled pair of headphones to idle.
         super().__init__("distance", SensorConfig(
-            engaged_when="open",  # distance uses its own raw state below threshold
+            engaged_when=config.engaged_when,
             bounce_time_ms=config.bounce_time_ms,
             min_lift_ms=config.min_lift_ms,
             min_replace_ms=config.min_replace_ms,

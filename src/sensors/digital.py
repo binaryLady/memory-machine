@@ -21,7 +21,7 @@ _DIGITAL_DEFAULTS: dict[str, dict[str, Any]] = {
 }
 
 
-def _base_config(sensor_type: str, config: Any) -> SensorConfig:
+def _base_config(sensor_type: str, config: Any) -> tuple[SensorConfig, bool]:
     table = _DIGITAL_DEFAULTS.get(sensor_type, {})
     pull_up = config.pull_up if table.get("pull_up") is None else table["pull_up"]
     return SensorConfig(

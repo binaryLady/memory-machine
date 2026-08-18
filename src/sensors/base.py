@@ -66,6 +66,14 @@ class Sensor(ABC):
         """Return the instantaneous raw hardware state (not debounced)."""
         ...
 
+    def engaged_from_raw(self, raw: bool) -> bool:
+        """Map a raw electrical state to the semantic "lifted" state."""
+        return raw if self._config.engaged_when == "closed" else not raw
+
+    def is_lifted(self) -> bool:
+        """Return the instantaneous semantic state, honouring engaged_when."""
+        return self.engaged_from_raw(self.is_engaged())
+
     def _on_raw_change(self, engaged: bool, timestamp: float | None = None) -> None:
         """To be called by backends whenever the raw state changes.
 
@@ -109,8 +117,7 @@ class Sensor(ABC):
 
     def _emit(self, raw_engaged: bool, timestamp: float) -> None:
         """Emit the debounced event."""
-        # Map raw state to the semantic "engaged" state using engaged_when.
-        engaged = raw_engaged if self._config.engaged_when == "closed" else not raw_engaged
+        engaged = self.engaged_from_raw(raw_engaged)
         event = "lift" if engaged else "replace"
 
         LOGGER.info(

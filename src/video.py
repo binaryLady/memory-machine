@@ -164,15 +164,18 @@ class VideoEngine:
 
     def set_mode(self, mode: str) -> None:
         mode = mode.upper()
-        if mode == self._mode:
-            return
+        # Re-entering the current mode must still restart it: a re-lift while
+        # already rewinding restarts the audio, so the video has to rewind from
+        # the end again, and on_rewind_end=loop_reverse re-enters REVERSE.
+        if mode != self._mode:
+            LOGGER.info("Video mode -> %s", mode)
         self._mode = mode
-        LOGGER.info("Video mode -> %s", mode)
 
         if mode == "REVERSE":
             self._current_index = float(self._frame_count - 1)
             self._compute_reverse_step()
             self._next_deadline = time.monotonic() + self._interval
+            self._render_frame_at(int(self._current_index))
         elif mode == "FORWARD":
             self._current_index = 0.0
             self._next_deadline = time.monotonic() + self._interval
@@ -189,6 +192,8 @@ class VideoEngine:
     def _frame_at(self, index: int) -> Any:
         if self._frames is not None:
             return self._frames[index]
+        if self._cap is None:
+            return None
         self._cap.set(self._cv2.CAP_PROP_POS_FRAMES, index)
         ok, frame = self._cap.read()
         if not ok:
@@ -223,7 +228,7 @@ class VideoEngine:
         return self._mode == "REVERSE" and self._current_index <= 0
 
     def render_next(self) -> None:
-        if self._mode == "BLACK":
+        if self._mode == "BLACK" or self._frame_count <= 0:
             self._render_black()
             return
 

@@ -32,6 +32,11 @@ class KeyboardSensor:
     def is_engaged(self) -> bool:
         return self._engaged
 
+    def is_lifted(self) -> bool:
+        # The spacebar toggles the semantic state directly, so there is no raw
+        # electrical state to map through engaged_when.
+        return self._engaged
+
     def handle_key(self, key: int) -> str | None:
         """Process a cv2 key code. Returns 'quit' or 'dump' commands, if any."""
         if key == -1:
