@@ -12,8 +12,8 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
 | `motion-player-status` | `--json` | state, sensor, audio sink, display mode, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill` | render a cut at the screen's resolution and build its reverse; run per cut |
-| `motion-player-reverse` | `[SRC] [DST]` | build the pre-rendered reverse clip; run per cut, including the portrait one |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` | render a cut at the screen's resolution and build its reverse; run per cut |
+| `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
 | `motion-player` | `--check-config` `--verbose` `--log` `--config PATH` | the engine itself |
@@ -21,6 +21,9 @@ on the Pi unless marked **(laptop)**.
 `motion-player-install-deb` also exists but is not meant to be run by hand: it
 installs the newest built package and exists so unattended updates can hold one
 fixed `sudoers` rule.
+
+Both render commands skip work whose output is already newer than its source;
+`--force` rebuilds regardless.
 
 Two things worth committing to memory:
 
