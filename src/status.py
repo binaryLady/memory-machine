@@ -165,6 +165,15 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = argv or sys.argv[1:]
     json_mode = "--json" in argv
+    if "--watch" in argv:
+        # A live panel over SSH: reprint every two seconds until Ctrl-C.
+        try:
+            while True:
+                print("\033[2J\033[H", end="")
+                main([a for a in argv if a != "--watch"])
+                time.sleep(2)
+        except KeyboardInterrupt:
+            return 0
     status_file = _status_file()
     status = Status()
     if status_file.exists():

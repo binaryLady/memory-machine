@@ -126,6 +126,7 @@ reason and shows a black screen if the files are absent.
 
 | Command | What it does |
 | --- | --- |
+| `motion-player-setup` | guided configuration: screen shape, sensor, sleep hours, test mode |
 | `motion-player-toggle` | start/stop the piece (`--start`, `--stop`) |
 | `motion-player-status` | runtime state and resolved config (`--json`) |
 | `motion-player-update` | fetch, rebuild, reinstall, restart, roll back on failure |

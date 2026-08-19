@@ -10,7 +10,8 @@ on the Pi unless marked **(laptop)**.
 | Command | Flags | What it does |
 | --- | --- | --- |
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
-| `motion-player-status` | `--json` | state, sensor, audio sink, display mode, last error, resolved config |
+| `motion-player-setup` | — | guided configuration: screen shape, sensor, sleep, test mode |
+| `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` | render a cut at the screen's resolution and build its reverse; run per cut |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
@@ -36,6 +37,17 @@ Two things worth committing to memory:
 ---
 
 ## Getting started
+
+The quickest route on a Pi that already has the package: run the guided setup.
+It shows what screen is attached, asks the shape, the sensor, the sleep hours
+and gallery-vs-test mode, then writes the config and offers a restart:
+
+```bash
+motion-player-setup
+```
+
+Every answer can be skipped with Enter, and the previous config is backed up
+beside itself before anything is written.
 
 First install on a fresh Pi. The bootstrap installs dependencies, builds and
 installs the `.deb`, enables linger, and starts the service:
