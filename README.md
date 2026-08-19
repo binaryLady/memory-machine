@@ -235,6 +235,11 @@ interval_s          = 60               ; heartbeat interval
 batch_size          = 10               ; events per POST
 timeout_s           = 5                ; HTTP timeout
 
+[schedule]
+enabled             = false            ; sleep overnight: black, silent, dark LCD
+sleep_start         = 00:00            ; HH:MM local; may span midnight
+sleep_end           = 08:00
+
 [system]
 log_level           = info             ; debug | info | warning | error
 log_max_mb          = 20               ; cap across all rotated files

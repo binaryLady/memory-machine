@@ -83,6 +83,7 @@ class VideoEngine:
         self._timing_late = 0
         self._last_source: Any = None
         self._force_redraw = True
+        self._last_timing: dict[str, Any] | None = None
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._select_variant()
@@ -418,6 +419,11 @@ class VideoEngine:
             LOGGER.error("cv2.imshow failed: %s", exc)
 
     @property
+    def last_timing(self) -> dict[str, Any] | None:
+        """The most recently completed timing window, or None before the first."""
+        return self._last_timing
+
+    @property
     def rewind_duration_s(self) -> float:
         """How long a full rewind takes at the current reverse rate.
 
@@ -447,9 +453,20 @@ class VideoEngine:
         self._timing_late += int(was_late)
 
         window = started - self._timing_started
-        if window < _TIMING_REPORT_S:
+        if window <= 0 or window < _TIMING_REPORT_S:
             return
 
+        # Retained for telemetry: the reset below is destructive, and the log
+        # line is unreadable to a remote monitor.
+        self._last_timing = {
+            "mode": self._mode,
+            "fps": round(self._timing_frames / window, 1),
+            "target_fps": round(self._fps, 1),
+            "frame_mean_ms": round((self._timing_total_s / self._timing_frames) * 1000, 1),
+            "frame_worst_ms": round(self._timing_worst_s * 1000, 1),
+            "late": self._timing_late,
+            "frames": self._timing_frames,
+        }
         LOGGER.info(
             "Playback %s: %.1f fps target %.1f, frame mean %.1fms worst %.1fms, %d/%d late",
             self._mode,

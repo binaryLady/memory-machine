@@ -28,6 +28,25 @@ class _HeartbeatData:
     last_error: str
 
 
+def _health_fields(extra: dict[str, Any]) -> dict[str, Any]:
+    """The compact health subset forwarded in every heartbeat.
+
+    Everything in status extras is visible locally via motion-player-status;
+    only what a remote monitor acts on rides the POST. Playback figures are
+    flattened from the last completed timing window.
+    """
+    fields: dict[str, Any] = {}
+    for key in ("cpu_percent", "temperature_c", "throttled", "asleep", "version"):
+        if key in extra:
+            fields[key] = extra[key]
+    playback = extra.get("playback")
+    if isinstance(playback, dict):
+        for key in ("fps", "target_fps", "frame_worst_ms"):
+            if key in playback:
+                fields[key] = playback[key]
+    return fields
+
+
 class Telemetry:
     """Non-blocking telemetry sender.
 
@@ -132,8 +151,10 @@ class Telemetry:
             accepted_count=data.accepted_count,
             rejected_count=data.rejected_count,
             audio_sink=data.audio_sink,
+            display_mode=snapshot.get("display_mode", "unknown"),
             last_error=data.last_error,
             log_tail=self._read_log_tail(),
+            **_health_fields(snapshot.get("extra") or {}),
         )
 
     def _read_log_tail(self) -> list[str]:

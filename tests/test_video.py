@@ -489,3 +489,27 @@ def test_an_unknown_screen_size_keeps_the_default(
     )
 
     assert engine._video_path == clip
+
+
+def test_the_last_timing_window_survives_the_counter_reset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """The log line is unreadable to a remote monitor; the property is not."""
+    clip, reverse = make_clips(tmp_path)
+    engine = make_engine(monkeypatch, clip, reverse)
+
+    assert engine.last_timing is None, "nothing to report before the first window"
+
+    engine.set_mode("REVERSE")
+    import video as video_module
+
+    monkeypatch.setattr(video_module, "_TIMING_REPORT_S", 0.0)
+    tick(engine)
+    tick(engine)
+
+    timing = engine.last_timing
+    assert timing is not None
+    assert timing["mode"] == "REVERSE"
+    assert timing["target_fps"] == 30.0
+    assert timing["frames"] >= 1
+    assert engine._timing_frames == 0, "the counters were reset after capture"

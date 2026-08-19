@@ -183,3 +183,37 @@ def test_first_heartbeat_is_not_gated_on_host_uptime(monkeypatch: Any) -> None:
     server.shutdown()
 
     assert [item for item in collector if item.get("event") == "heartbeat"]
+
+
+def test_the_heartbeat_carries_health_figures_from_status_extras() -> None:
+    """A remote monitor needs the Pi's vitals, not just the piece's state."""
+    from telemetry import _health_fields
+
+    extra = {
+        "cpu_percent": 34.0,
+        "temperature_c": 52.1,
+        "throttled": "0x0",
+        "asleep": False,
+        "version": "1.0.1~git71",
+        "mem_available_mb": 2048.0,
+        "playback": {"fps": 29.9, "target_fps": 30.0, "frame_worst_ms": 34.1,
+                     "frame_mean_ms": 27.0, "late": 2, "frames": 300},
+    }
+
+    fields = _health_fields(extra)
+
+    assert fields["cpu_percent"] == 34.0
+    assert fields["temperature_c"] == 52.1
+    assert fields["throttled"] == "0x0"
+    assert fields["fps"] == 29.9
+    assert fields["frame_worst_ms"] == 34.1
+    assert fields["version"] == "1.0.1~git71"
+    assert "mem_available_mb" not in fields, "bulk figures stay in status.json"
+    assert "frame_mean_ms" not in fields
+
+
+def test_health_fields_survive_an_empty_or_partial_snapshot() -> None:
+    from telemetry import _health_fields
+
+    assert _health_fields({}) == {}
+    assert _health_fields({"playback": "not-a-dict"}) == {}

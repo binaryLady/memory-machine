@@ -80,3 +80,27 @@ def test_validate_invalid_idle_mode(tmp_path: Path) -> None:
     cfg = config.load(path)
     problems = config.validate(cfg)
     assert any("idle_mode" in p for p in problems)
+
+
+def test_schedule_defaults_are_disabled_midnight_to_eight(tmp_path) -> None:
+    path = _write(tmp_path, "[media]\nvideo_file = piece.mp4\n")
+    cfg = config.load(str(path))
+
+    assert cfg.schedule.enabled is False
+    assert cfg.schedule.sleep_start == "00:00"
+    assert cfg.schedule.sleep_end == "08:00"
+
+
+def test_validate_rejects_unparseable_sleep_times_when_enabled(tmp_path) -> None:
+    path = _write(tmp_path, "[schedule]\nenabled = true\nsleep_start = 2am\n")
+    cfg = config.load(str(path))
+
+    problems = [p for p in config.validate(cfg) if "schedule" in p]
+    assert problems, "a typo in the hours must be reported, not silently ignored"
+
+
+def test_disabled_schedule_tolerates_garbage_times(tmp_path) -> None:
+    path = _write(tmp_path, "[schedule]\nenabled = false\nsleep_start = whenever\n")
+    cfg = config.load(str(path))
+
+    assert not [p for p in config.validate(cfg) if "schedule" in p]
