@@ -381,7 +381,13 @@ enabled     = true
 i2c_address = 0x27
 idle_bpm    = 60
 engaged_bpm = 100
+sleep_bpm   = 0
 ```
+
+The heart beats at `idle_bpm` at rest and `engaged_bpm` while someone listens;
+overnight it slows to `sleep_bpm` — 0 holds it still — while the backlight goes
+dark and the panel says goodnight. It says hello for a few seconds at wake, and
+goodbye when the piece shuts down.
 
 The panel is driven from its own thread, never the render loop — an I2C write
 takes milliseconds against a 33ms frame budget. If it cannot be opened, or a
