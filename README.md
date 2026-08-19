@@ -195,6 +195,13 @@ volume              = 0.8              ; fixed 0.0–1.0
 fade_out_ms         = 400
 on_audio_end        = silence          ; silence | loop
 
+[lcd]
+enabled             = false            ; 20x4 I2C character panel
+i2c_bus             = 1
+i2c_address         = 0x27
+idle_bpm            = 60               ; heart rate at rest
+engaged_bpm         = 100              ; heart rate while listening
+
 [sensor]
 sensor_type         = switch           ; switch | reed | beam | reflective |
                                        ; capacitive | distance | hall | pir |

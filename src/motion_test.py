@@ -17,6 +17,7 @@ import config
 import logging_setup
 import status as status_module
 from audio import AudioEngine
+from lcd import Heartbeat
 from sensors import NullSensor, make_sensor, start_sensor
 from state import StateMachine
 from telemetry import Telemetry
@@ -70,7 +71,8 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
 
 
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
-               status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int) -> int:
+               status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int,
+               heartbeat: Heartbeat) -> int:
     events: queue.Queue = queue.Queue()
     started = start_sensor(sensor, events)
     degraded = started is not sensor
@@ -132,6 +134,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         now = time.monotonic()
         state.tick(now)
         status.set_state(state.state)
+        heartbeat.set_state(state.state)
 
         # Video at-start detection.
         if state.state == "ENGAGED" and video.at_start:
@@ -201,6 +204,8 @@ def run(argv: list[str] | None = None) -> int:
         audio = AudioEngine(cfg)
         sensor = make_sensor(cfg.sensor)
         state = StateMachine(cfg, audio, video, status)
+        heartbeat = Heartbeat(cfg, status)
+        heartbeat.start()
         log_path = state_dir / "motion-player.log"
         telemetry = Telemetry(cfg, status, log_path)
 
@@ -209,7 +214,7 @@ def run(argv: list[str] | None = None) -> int:
             LOGGER.warning("Preflight: %s", problem)
             status.set_last_error(problem)
 
-        return _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd)
+        return _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd, heartbeat)
     except Exception as exc:  # noqa: BLE001
         LOGGER.critical("Unhandled exception: %s\n%s", exc, traceback.format_exc())
         status.set_last_error(str(exc))
@@ -225,6 +230,10 @@ def run(argv: list[str] | None = None) -> int:
             pass
         try:
             telemetry.stop()  # type: ignore[has-type]
+        except NameError:
+            pass
+        try:
+            heartbeat.stop()  # type: ignore[has-type]
         except NameError:
             pass
         _release_lock(lock_fd)

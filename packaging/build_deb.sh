@@ -143,10 +143,10 @@ chmod 0644 "$STAGE/DEBIAN/conffiles"
 # 9. Package metadata
 # ---------------------------------------------------------------------------
 if [[ "${STRICT_DEPS:-0}" == "1" ]]; then
-    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
+    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
     RECOMMENDS=""
 else
-    DEPENDS="python3, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
+    DEPENDS="python3, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
     RECOMMENDS="python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame"
 fi
 

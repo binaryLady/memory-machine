@@ -316,6 +316,40 @@ as primary in the desktop's screen settings.
 
 ---
 
+## The heartbeat panel
+
+An optional 20x4 character LCD on I2C, showing a beating heart above the
+installation's health. The heart beats slowly at rest and quickens while the
+headphones are lifted, so the panel reports the state of the piece rather than
+just the machine.
+
+Enable I2C once, then find the panel's address — these modules are almost always
+0x27 or 0x3F:
+
+```bash
+sudo raspi-config nonint do_i2c 0 && sudo i2cdetect -y 1
+```
+
+Then in `/etc/motion-player/config.ini`:
+
+```ini
+[lcd]
+enabled     = true
+i2c_address = 0x27
+idle_bpm    = 60
+engaged_bpm = 100
+```
+
+The panel is driven from its own thread, never the render loop — an I2C write
+takes milliseconds against a 33ms frame budget. If it cannot be opened, or a
+write fails, the reason is logged and the piece carries on without it:
+
+```bash
+grep -a -i lcd ~/.local/state/motion-player/motion-player.log | tail -5
+```
+
+---
+
 ## Multiple screens
 
 An HDMI splitter mirrors one signal, so the Pi renders a single framebuffer and

@@ -39,6 +39,15 @@ class PlaybackConfig:
 
 
 @dataclass(frozen=True)
+class LcdConfig:
+    enabled: bool
+    i2c_bus: int
+    i2c_address: int
+    idle_bpm: float
+    engaged_bpm: float
+
+
+@dataclass(frozen=True)
 class AudioConfig:
     audio_sink: str
     volume: float
@@ -86,6 +95,7 @@ class Config:
     media: MediaConfig
     playback: PlaybackConfig
     audio: AudioConfig
+    lcd: LcdConfig
     sensor: SensorConfig
     system: SystemConfig
     telemetry: TelemetryConfig
@@ -97,6 +107,7 @@ class Config:
             ("media", self.media),
             ("playback", self.playback),
             ("audio", self.audio),
+            ("lcd", self.lcd),
             ("sensor", self.sensor),
             ("system", self.system),
             ("telemetry", self.telemetry),
@@ -130,6 +141,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "volume": 0.8,
         "fade_out_ms": 400,
         "on_audio_end": "silence",
+    },
+    "lcd": {
+        "enabled": False,
+        "i2c_bus": 1,
+        "i2c_address": "0x27",
+        "idle_bpm": 60.0,
+        "engaged_bpm": 100.0,
     },
     "sensor": {
         "sensor_type": "switch",
@@ -280,6 +298,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
     media_raw = _section("media")
     playback_raw = _section("playback")
     audio_raw = _section("audio")
+    lcd_raw = _section("lcd")
     sensor_raw = _section("sensor")
     system_raw = _section("system")
     telemetry_raw = _section("telemetry")
@@ -305,6 +324,16 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             volume=_parse_float(audio_raw.get("volume"), DEFAULTS["audio"]["volume"], 0.0, 1.0),
             fade_out_ms=_parse_int(audio_raw.get("fade_out_ms"), DEFAULTS["audio"]["fade_out_ms"], 0),
             on_audio_end=str(audio_raw.get("on_audio_end", DEFAULTS["audio"]["on_audio_end"])),
+        ),
+        lcd=LcdConfig(
+            enabled=_parse_bool(lcd_raw.get("enabled"), DEFAULTS["lcd"]["enabled"]),
+            i2c_bus=_parse_int(lcd_raw.get("i2c_bus"), DEFAULTS["lcd"]["i2c_bus"], 0),
+            i2c_address=_parse_i2c_address(lcd_raw.get("i2c_address"))
+            or int(str(DEFAULTS["lcd"]["i2c_address"]), 0),
+            idle_bpm=_parse_float(lcd_raw.get("idle_bpm"), DEFAULTS["lcd"]["idle_bpm"], 1.0, 300.0),
+            engaged_bpm=_parse_float(
+                lcd_raw.get("engaged_bpm"), DEFAULTS["lcd"]["engaged_bpm"], 1.0, 300.0
+            ),
         ),
         sensor=SensorConfig(
             sensor_type=str(sensor_raw.get("sensor_type", DEFAULTS["sensor"]["sensor_type"])),
