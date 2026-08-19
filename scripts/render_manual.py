@@ -28,7 +28,7 @@ REPO = Path(__file__).resolve().parent.parent
 GROUPS = {
     "Setup": [
         "Getting started", "Media", "A DSI panel", "The heartbeat panel",
-        "Multiple screens", "Config",
+        "Multiple screens", "Sleeping overnight", "Config",
     ],
     "Running": [
         "Every command at a glance", "Quick tips", "Service control",
@@ -126,6 +126,12 @@ def render_markdown(source: str) -> tuple[str, list[str]]:
             title = re.sub(r"\*\*(.+?)\*\*", r"\1", line[3:].strip())
             titles.append(title)
             out.append(f'<h2 id="{slug(title)}">{H.escape(title)}</h2>')
+            i += 1
+            continue
+
+        if line.startswith("# ") and not line.startswith("## "):
+            # The file's own H1; the page header carries the title instead.
+            flush_all()
             i += 1
             continue
 
