@@ -190,7 +190,15 @@ motion-player-prepare ~/memory-machine-media/piece.mp4 --size 1920x1080 --mode f
 ```
 
 `--mode fit` pads with black, `--mode fill` covers the screen and crops the
-overflow.
+overflow, and `--mode tile` repeats the frame across the screen instead of
+cropping — for a screen far wider than the piece, where a crop would leave a
+narrow slice of it. A 1280x1280 square onto a 1920x480 strip becomes four
+480x480 repeats.
+
+Those three are mechanical. Anything compositional — a different framing, a
+deliberate arrangement, motion that responds to the shape — belongs in an editor.
+Prepare the file however you like and hand the result to `motion-player-reverse`,
+which builds the reversed copy from whatever you give it.
 
 **Preparing the portrait cut needs an explicit `--size`**, because the default
 comes from the screen this Pi is attached to, which is the wrong shape for it:
