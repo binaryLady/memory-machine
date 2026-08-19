@@ -41,11 +41,41 @@ log() {
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"
 }
 
+dpkg_is_interrupted() {
+    # --audit lists packages left half-configured. Needs no root, so it is safe
+    # to ask before deciding whether recovery is required.
+    [ -n "$(dpkg --audit 2>/dev/null)" ]
+}
+
 install_deb() {
     local deb="$1"
+    local status
+
+    # An install interrupted partway leaves dpkg needing --configure -a, and
+    # every apt call afterwards refuses until someone runs it. Unattended, that
+    # means one bad transaction stops all future updates.
+    if dpkg_is_interrupted; then
+        log "dpkg is in an interrupted state; running --configure -a first"
+        if sudo -n true 2>/dev/null || [ -t 0 ]; then
+            sudo dpkg --configure -a 2>&1 | tee -a "$LOG" || true
+        fi
+    fi
     if sudo -n true 2>/dev/null || [ -t 0 ]; then
-        sudo apt install --reinstall -y --allow-downgrades "$deb" >>"$LOG" 2>&1
-        return
+        # Prompt for the password first, and visibly. Sending apt's output
+        # straight to the log takes sudo's prompt with it, so an interactive
+        # install waits on something the operator cannot see.
+        if [ -t 0 ] && ! sudo -n true 2>/dev/null; then
+            sudo -v || { log "ERROR: could not obtain sudo to install the package"; return 1; }
+        fi
+        set +e
+        sudo apt install --reinstall -y --allow-downgrades "$deb" 2>&1 | tee -a "$LOG"
+        status=${PIPESTATUS[0]}
+        set -e
+        if [ "$status" != "0" ]; then
+            log "ERROR: installing $(basename "$deb") failed with status $status"
+            return 1
+        fi
+        return 0
     fi
     # The helper takes no arguments so it can hold a single fixed sudoers rule;
     # it installs the newest package in the repo, so make this one the newest.
@@ -54,7 +84,14 @@ install_deb() {
     else
         touch "$deb"
     fi
+    set +e
     sudo -n /usr/bin/motion-player-install-deb >>"$LOG" 2>&1
+    status=$?
+    set -e
+    if [ "$status" != "0" ]; then
+        log "ERROR: unattended install failed with status $status; see $LOG"
+        return 1
+    fi
 }
 
 report_failure() {
@@ -212,7 +249,11 @@ make release >>"$LOG" 2>&1
 DEB="$(ls -t ./motion-player_*.deb | head -n1)"
 log "Built $(basename "$DEB")"
 
-install_deb "$DEB"
+if ! install_deb "$DEB"; then
+    log "Update aborted before installing; the previous version is untouched"
+    systemctl --user start "$SERVICE" || true
+    exit 1
+fi
 
 systemctl --user daemon-reload
 systemctl --user enable "$SERVICE" >/dev/null 2>&1 || true

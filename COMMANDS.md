@@ -654,6 +654,17 @@ dpkg-query -W -f='${Version}\n' motion-player; cd ~/memory-machine && echo "$(tr
 
 `motion-player-update --force` rebuilds and reinstalls regardless.
 
+**apt refuses to do anything: "dpkg was interrupted".** An install that was
+killed partway leaves packages half-configured, and every later apt call refuses
+until that is cleared. The updater now detects and clears it before installing,
+but to do it by hand:
+
+```bash
+sudo dpkg --configure -a
+```
+
+Note the `-a` — `dpkg --configure -` is a different, invalid command.
+
 **The service won't stay up after an update.** The updater now appends the
 `systemctl` status and the tail of the engine log to `update.log`, so the reason
 should be right there:
