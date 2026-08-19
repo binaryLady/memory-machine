@@ -184,7 +184,7 @@ cuts                  =                ; alternative cuts, comma separated;
 [playback]
 idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
 reverse_rate        = native           ; native | fit_to_audio | <float>
-on_rewind_end       = hold             ; hold | loop_reverse | resume_forward
+on_rewind_end       = resume_forward   ; resume_forward | hold | loop_reverse
 scaling             = fit              ; fit | fill | stretch
 fullscreen          = true
 display             = auto             ; auto | HDMI-A-1 | HDMI-A-2

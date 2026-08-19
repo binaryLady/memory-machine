@@ -104,3 +104,11 @@ def test_disabled_schedule_tolerates_garbage_times(tmp_path) -> None:
     cfg = config.load(str(path))
 
     assert not [p for p in config.validate(cfg) if "schedule" in p]
+
+
+def test_the_forward_reward_is_the_default(tmp_path) -> None:
+    """Reaching the beginning turns the piece forward unless configured away."""
+    path = _write(tmp_path, "[media]\nvideo_file = piece.mp4\n")
+    cfg = config.load(str(path))
+
+    assert cfg.playback.on_rewind_end == "resume_forward"
