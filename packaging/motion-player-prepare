@@ -11,6 +11,7 @@ MEDIA_DIR="${MEDIA_DIR:-$HOME/memory-machine-media}"
 SRC=""
 SIZE=""
 MODE="fit"
+FORCE=0
 CRF="${CRF:-18}"
 PRESET="${PRESET:-medium}"
 
@@ -22,6 +23,7 @@ motion-player-prepare — render the piece at the screen's resolution.
 
   SRC      source clip (default: piece.mp4 in the media folder)
   --size   target resolution (default: what the connected screen reports)
+  --force  rebuild even when the outputs are already up to date
   --mode   fit  keep the whole frame, pad with black (default)
            fill cover the screen, crop the overflow
            tile repeat the frame across the screen instead of cropping
@@ -33,6 +35,7 @@ USAGE
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
+        --force) FORCE=1; shift ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; usage; exit 2 ;;
@@ -123,17 +126,38 @@ STEM="${SRC%.*}"
 OUT="${STEM}.${SIZE}.mp4"
 REVERSE="${STEM}.${SIZE}.reverse.mp4"
 
-echo "Rendering $SRC at ${SIZE} (${MODE})..."
-if [ "$MODE" = "tile" ] && [ "${COUNT:-1}" -gt 1 ]; then
-    ffmpeg -nostdin -v error -y -i "$SRC" -an -filter_complex "$VF" \
-        -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+# Rendering is minutes of CPU, and these commands get re-run while working
+# through a set of cuts. An output already newer than its source is current;
+# editing the source brings its rebuild back.
+needs_render() {
+    if [ "$FORCE" = "1" ] || [ ! -f "$OUT" ]; then
+        return 0
+    fi
+    if [ "$OUT" -nt "$SRC" ]; then
+        return 1
+    fi
+    return 0
+}
+
+if needs_render; then
+    echo "Rendering $SRC at ${SIZE} (${MODE})..."
+    if [ "$MODE" = "tile" ] && [ "${COUNT:-1}" -gt 1 ]; then
+        ffmpeg -nostdin -v error -y -i "$SRC" -an -filter_complex "$VF" \
+            -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+    else
+        ffmpeg -nostdin -v error -y -i "$SRC" -an -vf "$VF" \
+            -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+    fi
 else
-    ffmpeg -nostdin -v error -y -i "$SRC" -an -vf "$VF" \
-        -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+    echo "$(basename "$OUT") is newer than $(basename "$SRC"); skipping the render."
 fi
 
 echo "Building the reversed copy..."
-motion-player-reverse "$OUT" "$REVERSE"
+if [ "$FORCE" = "1" ]; then
+    motion-player-reverse "$OUT" "$REVERSE" --force
+else
+    motion-player-reverse "$OUT" "$REVERSE"
+fi
 
 cat <<EOF
 

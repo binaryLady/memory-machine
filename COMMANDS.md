@@ -195,6 +195,11 @@ cropping — for a screen far wider than the piece, where a crop would leave a
 narrow slice of it. A 1280x1280 square onto a 1920x480 strip becomes four
 480x480 repeats.
 
+Both commands skip work that is already done: an output newer than its source
+is left alone, so re-running them while working through a set of cuts costs
+nothing. Editing a source makes its outputs stale again and they rebuild. Pass
+`--force` to rebuild regardless.
+
 Those three are mechanical. Anything compositional — a different framing, a
 deliberate arrangement, motion that responds to the shape — belongs in an editor.
 Prepare the file however you like and hand the result to `motion-player-reverse`,
