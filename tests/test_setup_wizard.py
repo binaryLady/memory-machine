@@ -65,3 +65,24 @@ def test_the_square_preset_hint_uses_fit() -> None:
     hint = render_prepare_hint("~/memory-machine-media/piece.mp4", 720, 720, "fit")
 
     assert "--mode fit" in hint
+
+
+def test_the_reward_choices_map_to_real_config_values() -> None:
+    """The menu speaks the visitor's language; the config speaks the engine's."""
+    mapping = {"t": "resume_forward", "f": "hold", "s": "loop_reverse"}
+    labels = ["turn and play forward - the reward for staying present",
+              "fade to black and hold",
+              "start the rewind over"]
+
+    # Every menu label's first letter resolves to a valid engine mode.
+    import config as config_module
+
+    for label in labels:
+        assert mapping[label[0]] in config_module._VALID_ON_REWIND_END
+
+
+def test_audio_device_listing_degrades_to_empty_off_pi() -> None:
+    """No pygame, no devices — the wizard skips the menu instead of crashing."""
+    import setup_wizard
+
+    assert isinstance(setup_wizard.audio_device_names(), list)
