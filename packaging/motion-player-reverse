@@ -8,8 +8,24 @@
 set -euo pipefail
 
 MEDIA_DIR="${MEDIA_DIR:-$HOME/memory-machine-media}"
-SRC="${1:-$MEDIA_DIR/piece.mp4}"
-DST="${2:-${SRC%.*}.reverse.mp4}"
+FORCE=0
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=1 ;;
+        -h|--help)
+            echo "motion-player-reverse [SRC] [DST] [--force]"
+            echo "  Builds the pre-rendered reverse of SRC."
+            echo "  Skips the work when DST is already newer than SRC."
+            exit 0
+            ;;
+        -*) echo "Unknown option: $arg" >&2; exit 2 ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+
+SRC="${POSITIONAL[0]:-$MEDIA_DIR/piece.mp4}"
+DST="${POSITIONAL[1]:-${SRC%.*}.reverse.mp4}"
 SEGMENT_SECONDS="${SEGMENT_SECONDS:-10}"
 CRF="${CRF:-18}"
 PRESET="${PRESET:-medium}"
@@ -27,6 +43,15 @@ fi
 if [ "$SRC" = "$DST" ]; then
     echo "Refusing to overwrite the source clip" >&2
     exit 1
+fi
+
+# Reversing is minutes of CPU, and these commands get re-run while working
+# through a set of cuts. Skip when the output is already newer than its source;
+# edit the source and its newer mtime brings the rebuild back.
+if [ "$FORCE" = "0" ] && [ -f "$DST" ] && [ "$DST" -nt "$SRC" ]; then
+    echo "$(basename "$DST") is newer than $(basename "$SRC"); nothing to do."
+    echo "Pass --force to rebuild it anyway."
+    exit 0
 fi
 
 WORK="$(mktemp -d)"
