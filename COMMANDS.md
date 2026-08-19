@@ -39,8 +39,9 @@ Two things worth committing to memory:
 ## Getting started
 
 The quickest route on a Pi that already has the package: run the guided setup.
-It shows what screen is attached, asks the shape, the sensor, the sleep hours
-and gallery-vs-test mode, then writes the config and offers a restart:
+It shows what screen is attached, then walks through the shape, the sensor, the
+audio output, the forward reward, the heartbeat panel, the sleep hours and
+gallery-vs-test mode — writing the config and offering a restart at the end:
 
 ```bash
 motion-player-setup
