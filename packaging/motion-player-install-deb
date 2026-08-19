@@ -13,6 +13,13 @@ fi
 OWNER="${SUDO_USER:-root}"
 REPO="$(getent passwd "$OWNER" | cut -d: -f6)/memory-machine"
 
+# Recover from an install interrupted partway; apt refuses to do anything
+# until this is done, so an unattended update would fail here forever.
+if [ -n "$(dpkg --audit 2>/dev/null)" ]; then
+    echo "dpkg is in an interrupted state; running --configure -a"
+    dpkg --configure -a || true
+fi
+
 DEB="$(ls -t "$REPO"/motion-player_*.deb 2>/dev/null | head -n1 || true)"
 if [ -z "$DEB" ]; then
     echo "No built package found in $REPO" >&2

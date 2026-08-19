@@ -41,9 +41,25 @@ log() {
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"
 }
 
+dpkg_is_interrupted() {
+    # --audit lists packages left half-configured. Needs no root, so it is safe
+    # to ask before deciding whether recovery is required.
+    [ -n "$(dpkg --audit 2>/dev/null)" ]
+}
+
 install_deb() {
     local deb="$1"
     local status
+
+    # An install interrupted partway leaves dpkg needing --configure -a, and
+    # every apt call afterwards refuses until someone runs it. Unattended, that
+    # means one bad transaction stops all future updates.
+    if dpkg_is_interrupted; then
+        log "dpkg is in an interrupted state; running --configure -a first"
+        if sudo -n true 2>/dev/null || [ -t 0 ]; then
+            sudo dpkg --configure -a 2>&1 | tee -a "$LOG" || true
+        fi
+    fi
     if sudo -n true 2>/dev/null || [ -t 0 ]; then
         # Prompt for the password first, and visibly. Sending apt's output
         # straight to the log takes sudo's prompt with it, so an interactive
