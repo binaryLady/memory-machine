@@ -114,7 +114,10 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         video.set_idle_mode("loop_forward")
     status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
-    audio.set_max_duration(video.rewind_duration_s)
+    # The cap gets fade-room: when the rewind ends, on_rewind_end=hold fades
+    # the audio over fade_out_ms, and a cap at exactly the rewind duration
+    # would clip that fade into an audible cut.
+    audio.set_max_duration(video.rewind_duration_s + cfg.audio.fade_out_ms / 1000.0)
     video.set_mode("IDLE")
     telemetry.start()
 

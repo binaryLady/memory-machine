@@ -111,3 +111,13 @@ def test_a_zero_cap_does_not_silence_playback(monkeypatch: pytest.MonkeyPatch, t
     engine.play_from_start()
 
     assert engine._sound.play_calls == [{"maxtime": 0}]
+
+
+def test_the_cap_leaves_room_for_the_fade(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A cap at exactly the picture's end clips the hold-fade into a click."""
+    engine = make_engine(monkeypatch, tmp_path, length=180.0)
+
+    engine.set_max_duration(65.333 + 0.4)
+    engine.play_from_start()
+
+    assert engine._sound.play_calls == [{"maxtime": 65733}]
