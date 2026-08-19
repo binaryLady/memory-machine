@@ -10,6 +10,7 @@ import urllib.parse
 
 import display
 import playback_math
+import schedule
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -45,6 +46,7 @@ class LcdConfig:
     i2c_address: int
     idle_bpm: float
     engaged_bpm: float
+    sleep_bpm: float
 
 
 @dataclass(frozen=True)
@@ -74,10 +76,18 @@ class SensorConfig:
 
 
 @dataclass(frozen=True)
+class ScheduleConfig:
+    enabled: bool
+    sleep_start: str
+    sleep_end: str
+
+
+@dataclass(frozen=True)
 class SystemConfig:
     log_level: str
     log_max_mb: int
     restart_on_crash: bool
+    exit_after_s: int
 
 
 @dataclass(frozen=True)
@@ -98,6 +108,7 @@ class Config:
     lcd: LcdConfig
     sensor: SensorConfig
     system: SystemConfig
+    schedule: ScheduleConfig
     telemetry: TelemetryConfig
     source_path: Path
 
@@ -109,6 +120,7 @@ class Config:
             ("audio", self.audio),
             ("lcd", self.lcd),
             ("sensor", self.sensor),
+            ("schedule", self.schedule),
             ("system", self.system),
             ("telemetry", self.telemetry),
         ):
@@ -148,6 +160,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "i2c_address": "0x27",
         "idle_bpm": 60.0,
         "engaged_bpm": 100.0,
+        "sleep_bpm": 0.0,
     },
     "sensor": {
         "sensor_type": "switch",
@@ -165,10 +178,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_replace_ms": 250,
         "max_engaged_minutes": 30,
     },
+    "schedule": {
+        "enabled": False,
+        "sleep_start": "00:00",
+        "sleep_end": "08:00",
+    },
     "system": {
         "log_level": "info",
         "log_max_mb": 20,
         "restart_on_crash": True,
+        "exit_after_s": 0,
     },
     "telemetry": {
         "enabled": False,
@@ -212,6 +231,8 @@ def _parse_bool(value: Any, default: bool) -> bool:
 
 
 def _parse_int(value: Any, default: int, min_val: int | None = None, max_val: int | None = None) -> int:
+    if value is None:
+        return default
     try:
         v = int(value)
     except (TypeError, ValueError):
@@ -227,6 +248,9 @@ def _parse_int(value: Any, default: int, min_val: int | None = None, max_val: in
 
 
 def _parse_float(value: Any, default: float, min_val: float | None = None, max_val: float | None = None) -> float:
+    if value is None:
+        # Absent key: older configs predate newer keys, which is not an error.
+        return default
     try:
         v = float(value)
     except (TypeError, ValueError):
@@ -300,6 +324,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
     audio_raw = _section("audio")
     lcd_raw = _section("lcd")
     sensor_raw = _section("sensor")
+    schedule_raw = _section("schedule")
     system_raw = _section("system")
     telemetry_raw = _section("telemetry")
 
@@ -334,6 +359,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             engaged_bpm=_parse_float(
                 lcd_raw.get("engaged_bpm"), DEFAULTS["lcd"]["engaged_bpm"], 1.0, 300.0
             ),
+            sleep_bpm=_parse_float(lcd_raw.get("sleep_bpm"), DEFAULTS["lcd"]["sleep_bpm"], 0.0, 300.0),
         ),
         sensor=SensorConfig(
             sensor_type=str(sensor_raw.get("sensor_type", DEFAULTS["sensor"]["sensor_type"])),
@@ -355,10 +381,16 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
                 0,
             ),
         ),
+        schedule=ScheduleConfig(
+            enabled=_parse_bool(schedule_raw.get("enabled"), DEFAULTS["schedule"]["enabled"]),
+            sleep_start=str(schedule_raw.get("sleep_start", DEFAULTS["schedule"]["sleep_start"])),
+            sleep_end=str(schedule_raw.get("sleep_end", DEFAULTS["schedule"]["sleep_end"])),
+        ),
         system=SystemConfig(
             log_level=str(system_raw.get("log_level", DEFAULTS["system"]["log_level"])),
             log_max_mb=_parse_int(system_raw.get("log_max_mb"), DEFAULTS["system"]["log_max_mb"], 1),
             restart_on_crash=_parse_bool(system_raw.get("restart_on_crash"), DEFAULTS["system"]["restart_on_crash"]),
+            exit_after_s=_parse_int(system_raw.get("exit_after_s"), DEFAULTS["system"]["exit_after_s"], 0),
         ),
         telemetry=TelemetryConfig(
             enabled=_parse_bool(telemetry_raw.get("enabled"), DEFAULTS["telemetry"]["enabled"]),
@@ -445,6 +477,14 @@ def validate(config: Config) -> list[str]:
 
     if config.system.log_max_mb < 1:
         problems.append("system.log_max_mb must be at least 1")
+
+    if config.schedule.enabled:
+        for name, value in (
+            ("schedule.sleep_start", config.schedule.sleep_start),
+            ("schedule.sleep_end", config.schedule.sleep_end),
+        ):
+            if schedule.parse_hhmm(value) is None:
+                problems.append(f"{name} must be HH:MM; got {value!r}")
 
     if config.telemetry.enabled:
         url = config.telemetry.endpoint_url

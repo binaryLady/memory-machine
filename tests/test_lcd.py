@@ -84,3 +84,49 @@ def test_the_two_heart_glyphs_are_valid_5x8_bitmaps() -> None:
     assert sum(bin(r).count("1") for r in lcd.HEART_FULL) > sum(
         bin(r).count("1") for r in lcd.HEART_SMALL
     ), "the full heart must be the larger of the two"
+
+
+def test_the_panel_says_goodnight_while_the_piece_sleeps() -> None:
+    assert lcd.state_label("SLEEP") == "goodnight"
+    rows = lcd.format_rows("SLEEP", 0.0, 0.0, 0, 0, label=lcd.state_label("SLEEP"))
+    assert "goodnight" in rows[1]
+
+
+def test_the_panel_says_hello_for_a_few_seconds_after_waking() -> None:
+    assert lcd.state_label("IDLE", seconds_since_wake=2.0) == "hello"
+    assert lcd.state_label("IDLE", seconds_since_wake=6.0) == "at rest"
+
+
+def test_listening_beats_hello_when_someone_lifts_at_opening() -> None:
+    """A visitor at 8:01 should see 'listening', not a leftover greeting."""
+    assert lcd.state_label("ENGAGED", seconds_since_wake=2.0) == "listening"
+
+
+def test_the_heart_is_still_when_sleep_bpm_is_zero() -> None:
+    assert lcd.beat_is_full(1.0, 0.0) is False
+
+
+def test_the_farewell_fits_the_panel() -> None:
+    rows = lcd.farewell_rows()
+
+    assert len(rows) == lcd.ROWS
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+    assert "goodbye" in rows[1]
+
+
+def test_the_backlight_bit_toggles() -> None:
+    class FakeBus:
+        def __init__(self) -> None:
+            self.writes: list[int] = []
+
+        def write_byte(self, address: int, value: int) -> None:
+            self.writes.append(value)
+
+    bus = FakeBus()
+    panel = lcd.Hd44780I2c(bus, 0x27)
+
+    panel.set_backlight(False)
+    assert bus.writes[-1] & 0x08 == 0, "backlight bit must be clear"
+
+    panel.set_backlight(True)
+    assert bus.writes[-1] & 0x08 == 0x08, "backlight bit must be set"

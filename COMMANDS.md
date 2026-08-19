@@ -226,7 +226,10 @@ grep Playback ~/.local/state/motion-player/motion-player.log | tail -5
 ```
 
 Each line reports achieved frame rate against target, mean and worst frame time,
-and how many frames missed their deadline. Late frames in any number mean the Pi
+and how many frames missed their deadline. The same figures appear in
+`motion-player-status` under `playback`, alongside CPU, temperature, memory,
+load, disk free, and the firmware throttle flags — and the compact subset rides
+every telemetry heartbeat, so a remote monitor sees them too. Late frames in any number mean the Pi
 is not keeping up: prepare the media at the output size first, and if it still
 cannot, the source resolution is too high for software decode.
 
@@ -316,6 +319,31 @@ one fullscreen window on whichever the compositor treats as primary. `display`
 pins the mode on the named connector but does not choose which screen the window
 lands on — if it opens on the wrong one, disconnect the other, or set the panel
 as primary in the desktop's screen settings.
+
+---
+
+## Sleeping overnight
+
+The piece can rest outside gallery hours: screens black, audio silent, sensor
+events ignored, and the LCD dark with a "goodnight". At the wake time it says
+"hello" for a few seconds and the loop resumes exactly as configured — including
+the sensorless loop-forward fallback.
+
+```ini
+[schedule]
+enabled     = true
+sleep_start = 00:00
+sleep_end   = 08:00
+```
+
+Times are HH:MM local (set the Pi's timezone with `sudo raspi-config` if it is
+wrong); a window may span midnight. `sleep_start == sleep_end` disables the
+window, and a typo in the hours is reported by `--check-config` rather than
+silently ignored. Sleep and wake each emit a telemetry event, and
+`motion-player-status` shows `State: SLEEP` overnight.
+
+For a timed soak test, `system.exit_after_s = 3600` stops the piece cleanly
+after an hour and emits a `shutdown` telemetry event. Leave it at 0 for a show.
 
 ---
 

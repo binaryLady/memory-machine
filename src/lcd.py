@@ -45,8 +45,40 @@ def beat_is_full(elapsed_s: float, bpm: float) -> bool:
     return phase < 0.28
 
 
+# How long the panel says hello after waking before settling into "at rest".
+HELLO_SECONDS = 5.0
+
+
+def state_label(state: str, seconds_since_wake: float | None = None) -> str:
+    """The line-two label: the state of the piece, in a visitor's words."""
+    upper = state.upper()
+    if upper == "SLEEP":
+        return "goodnight"
+    if upper == "ENGAGED":
+        return "listening"
+    if seconds_since_wake is not None and seconds_since_wake < HELLO_SECONDS:
+        return "hello"
+    return "at rest"
+
+
+def farewell_rows() -> list[str]:
+    """What the panel shows when the piece shuts down."""
+    rows = [
+        "  memory-machine",
+        "  goodbye",
+        "",
+        "",
+    ]
+    return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
+
+
 def format_rows(
-    state: str, cpu_percent: float, temperature_c: float, lifts: int, uptime_s: float
+    state: str,
+    cpu_percent: float,
+    temperature_c: float,
+    lifts: int,
+    uptime_s: float,
+    label: str | None = None,
 ) -> list[str]:
     """The four lines, each padded to exactly the panel width.
 
@@ -60,7 +92,7 @@ def format_rows(
     else:
         uptime = f"{hours}h{minutes:02d}m"
 
-    listening = "listening" if state.upper() == "ENGAGED" else "at rest"
+    listening = label if label is not None else state_label(state)
 
     rows = [
         "  memory-machine",
@@ -71,33 +103,9 @@ def format_rows(
     return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
 
 
-def read_cpu_percent(previous: tuple[int, int] | None) -> tuple[float, tuple[int, int]]:
-    """CPU use since the last call, from /proc/stat totals."""
-    try:
-        with open("/proc/stat", encoding="utf-8") as handle:
-            fields = handle.readline().split()[1:]
-    except OSError:
-        return 0.0, previous or (0, 0)
-
-    values = [int(v) for v in fields[:8]]
-    idle = values[3] + values[4]
-    total = sum(values)
-    if previous is None:
-        return 0.0, (idle, total)
-
-    idle_delta = idle - previous[0]
-    total_delta = total - previous[1]
-    if total_delta <= 0:
-        return 0.0, (idle, total)
-    return max(0.0, min(100.0, 100.0 * (1.0 - idle_delta / total_delta))), (idle, total)
-
-
-def read_temperature_c() -> float:
-    try:
-        with open("/sys/class/thermal/thermal_zone0/temp", encoding="utf-8") as handle:
-            return int(handle.read().strip()) / 1000.0
-    except (OSError, ValueError):
-        return 0.0
+# Re-exported so existing imports and tests keep working; the readers moved to
+# sysinfo so telemetry and the main loop can share them.
+from sysinfo import read_cpu_percent, read_temperature_c  # noqa: E402,F401
 
 
 class Hd44780I2c:
@@ -155,6 +163,12 @@ class Hd44780I2c:
     def write_glyph_at(self, row: int, column: int, slot: int) -> None:
         self.command(0x80 | (_ROW_OFFSETS[row] + column))
         self.write_char(slot)
+
+    def set_backlight(self, on: bool) -> None:
+        self._backlight = _BACKLIGHT if on else 0
+        # A bare write latches the new backlight bit without disturbing the
+        # controller.
+        self._write(0)
 
 
 class Heartbeat:
@@ -219,6 +233,16 @@ class Heartbeat:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
+        if self._lcd is None:
+            return
+        # Best effort only: the piece is already stopping, so a failed goodbye
+        # must not turn a clean shutdown into an error.
+        try:
+            self._lcd.set_backlight(True)
+            for index, row in enumerate(farewell_rows()):
+                self._lcd.write_at(index, 0, row)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug("Could not write the goodbye: %s", exc)
 
     def _run(self) -> None:
         assert self._lcd is not None
@@ -227,22 +251,48 @@ class Heartbeat:
         last_rows: list[str] = []
         next_stats = 0.0
 
+        previous_state = ""
+        woke_at: float | None = None
+
         while not self._stop.is_set():
             now = time.monotonic()
-            engaged = self._state.upper() == "ENGAGED"
-            bpm = self._config.engaged_bpm if engaged else self._config.idle_bpm
+            current = self._state.upper()
+            if current != previous_state:
+                if current == "SLEEP":
+                    # Dark panel overnight: the room is empty and the piece is
+                    # resting; a lit display would say otherwise.
+                    try:
+                        lcd.set_backlight(False)
+                    except Exception as exc:  # noqa: BLE001
+                        LOGGER.debug("Backlight off failed: %s", exc)
+                elif previous_state == "SLEEP":
+                    woke_at = now
+                    try:
+                        lcd.set_backlight(True)
+                    except Exception as exc:  # noqa: BLE001
+                        LOGGER.debug("Backlight on failed: %s", exc)
+                previous_state = current
+
+            if current == "SLEEP":
+                bpm = self._config.sleep_bpm
+            elif current == "ENGAGED":
+                bpm = self._config.engaged_bpm
+            else:
+                bpm = self._config.idle_bpm
 
             try:
                 if now >= next_stats:
                     next_stats = now + 1.0
                     cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)
                     snapshot = self._status.snapshot()
+                    since_wake = None if woke_at is None else now - woke_at
                     rows = format_rows(
                         self._state,
                         cpu,
                         read_temperature_c(),
                         int(snapshot.get("lift_count", 0)),
                         now - self._started_at,
+                        label=state_label(self._state, since_wake),
                     )
                     for index, row in enumerate(rows):
                         # Only redraw lines that changed; the panel is slow and

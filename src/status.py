@@ -56,7 +56,12 @@ class Status:
             **self.extra,
         }
         try:
-            _status_file().write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            # Atomic: a reader mid-write must never see a truncated file, and a
+            # power cut mid-write must not leave one behind for the next boot.
+            target = _status_file()
+            tmp = target.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            os.replace(tmp, target)
         except OSError as exc:
             LOGGER.warning("Could not write status file: %s", exc)
 
@@ -77,6 +82,10 @@ class StatusWriter:
             self._status.sensor_engaged = False
 
     def set_state(self, state: str) -> None:
+        # Called every main-loop iteration; writing unconditionally meant
+        # hundreds of SD-card writes a second. Only a change is news.
+        if state == self._status.state:
+            return
         self._status.state = state
         self.write()
 
@@ -94,6 +103,10 @@ class StatusWriter:
 
     def set_display_mode(self, mode: str) -> None:
         self._status.display_mode = mode
+
+    def set_extra(self, key: str, value: Any) -> None:
+        """Stash a health figure without touching the file; write() flushes."""
+        self._status.extra[key] = value
 
     def set_last_error(self, message: str) -> None:
         self._status.last_error = message

@@ -17,7 +17,9 @@ import config
 import logging_setup
 import status as status_module
 from audio import AudioEngine
+import sysinfo
 from lcd import Heartbeat
+from schedule import SleepScheduler
 from sensors import NullSensor, make_sensor, start_sensor
 from state import StateMachine
 from telemetry import Telemetry
@@ -70,6 +72,27 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
     return problems
 
 
+def _apply_schedule_transition(transition: str | None, state: StateMachine, video: VideoEngine,
+                               audio: AudioEngine, telemetry: Telemetry, cfg: config.Config) -> None:
+    """Put the piece to bed or wake it, from a scheduler flip."""
+    if transition == "sleep":
+        if state.state == "ENGAGED":
+            # The existing replace transition fades the audio and clears the
+            # engagement bookkeeping; going black mid-listen without the fade
+            # would be a jolt.
+            state.handle("replace")
+        else:
+            audio.fade_out(cfg.audio.fade_out_ms)
+        video.set_mode("BLACK")
+        telemetry.event("sleep_start")
+        LOGGER.info("Going to sleep for the night")
+    elif transition == "wake":
+        video.set_mode("IDLE")
+        state.mark_audio_playing()
+        telemetry.event("sleep_end")
+        LOGGER.info("Waking up")
+
+
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int,
                heartbeat: Heartbeat) -> int:
@@ -98,12 +121,21 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
     # Track whether audio was playing to emit audio_end cleanly.
     state.mark_audio_playing()
 
+    scheduler = SleepScheduler(cfg.schedule)
+    status.set_extra("version", sysinfo.read_version())
+    loop_started = time.monotonic()
+    next_housekeeping = 0.0
+    cpu_previous: tuple[int, int] | None = None
+
     LOGGER.info("Main loop started; state=%s", state.state)
     while True:
         # Drain sensor events (from GPIO callbacks) without blocking.
         try:
             while True:
                 event, ts, source = events.get_nowait()
+                if scheduler.asleep:
+                    LOGGER.debug("Asleep; discarding sensor event %s", event)
+                    continue
                 LOGGER.debug("Event from queue: %s %s %s", event, ts, source)
                 state.handle(event)
                 status.set_state(state.state)
@@ -133,12 +165,38 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         # Timer-based transitions (max-engaged timeout, audio end detection).
         now = time.monotonic()
         state.tick(now)
-        status.set_state(state.state)
-        heartbeat.set_state(state.state)
+
+        _apply_schedule_transition(scheduler.poll(now), state, video, audio, telemetry, cfg)
+        display_state = "SLEEP" if scheduler.asleep else state.state
+        status.set_state(display_state)
+        heartbeat.set_state(display_state)
 
         # Video at-start detection.
-        if state.state == "ENGAGED" and video.at_start:
+        if not scheduler.asleep and state.state == "ENGAGED" and video.at_start:
             state.handle("video_at_start")
+
+        # Once a second: host health into the status file, whence the LCD, the
+        # status CLI, and the telemetry heartbeat all read it.
+        if now >= next_housekeeping:
+            next_housekeeping = now + 1.0
+            cpu, cpu_previous = sysinfo.read_cpu_percent(cpu_previous)
+            status.set_extra("cpu_percent", round(cpu, 1))
+            status.set_extra("temperature_c", round(sysinfo.read_temperature_c(), 1))
+            status.set_extra("mem_available_mb", round(sysinfo.read_mem_available_mb(), 1))
+            status.set_extra("load_1m", sysinfo.read_load_1m())
+            status.set_extra("throttled", sysinfo.read_throttled())
+            status.set_extra("disk_free_mb", round(sysinfo.disk_free_mb(Path.home()), 1))
+            status.set_extra("asleep", scheduler.asleep)
+            timing = video.last_timing
+            if timing is not None:
+                status.set_extra("playback", timing)
+            status.write()
+
+        # A configured soak run stops itself instead of relying on someone
+        # remembering to; 0 means run forever, which is the gallery setting.
+        if cfg.system.exit_after_s > 0 and now - loop_started >= cfg.system.exit_after_s:
+            LOGGER.info("exit_after_s=%d reached; stopping", cfg.system.exit_after_s)
+            break
 
         # Periodic telemetry heartbeat.
         telemetry.heartbeat(sensor)
@@ -214,9 +272,17 @@ def run(argv: list[str] | None = None) -> int:
             LOGGER.warning("Preflight: %s", problem)
             status.set_last_error(problem)
 
-        return _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd, heartbeat)
+        result = _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd, heartbeat)
+        # A clean stop is news too: remote monitoring cannot otherwise tell a
+        # deliberate quit from the start of a crash loop.
+        telemetry.event("shutdown", reason="requested", exit_code=result)
+        return result
     except Exception as exc:  # noqa: BLE001
         LOGGER.critical("Unhandled exception: %s\n%s", exc, traceback.format_exc())
+        try:
+            telemetry.event("shutdown", reason="exception", error=str(exc))  # type: ignore[has-type]
+        except NameError:
+            pass
         status.set_last_error(str(exc))
         return 1
     finally:
