@@ -24,6 +24,7 @@ motion-player-prepare — render the piece at the screen's resolution.
   --size   target resolution (default: what the connected screen reports)
   --mode   fit  keep the whole frame, pad with black (default)
            fill cover the screen, crop the overflow
+           tile repeat the frame across the screen instead of cropping
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then prints the config lines.
 USAGE
@@ -70,6 +71,11 @@ fi
 WIDTH="${SIZE%x*}"
 HEIGHT="${SIZE#*x}"
 
+src_dimension() {
+    ffprobe -v error -select_streams v:0 -show_entries "stream=$1" \
+        -of default=nokey=1:noprint_wrappers=1 "$SRC" 2>/dev/null | head -n1
+}
+
 case "$MODE" in
     fit)
         VF="scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:black"
@@ -77,8 +83,38 @@ case "$MODE" in
     fill)
         VF="scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}"
         ;;
+    tile)
+        # Fit the frame to the screen's height, then repeat it across the width
+        # rather than cropping away everything that does not fit. Useful when a
+        # screen is a far wider shape than the piece and a crop would leave a
+        # narrow slice of it.
+        SRC_W="$(src_dimension width)"
+        SRC_H="$(src_dimension height)"
+        if [ -z "$SRC_W" ] || [ -z "$SRC_H" ] || [ "$SRC_H" -eq 0 ]; then
+            echo "Could not read the source dimensions; needed to work out the repeat count" >&2
+            exit 1
+        fi
+        SCALED_W=$(( (SRC_W * HEIGHT + SRC_H / 2) / SRC_H ))
+        [ "$SCALED_W" -lt 1 ] && SCALED_W=1
+        COUNT=$(( (WIDTH + SCALED_W - 1) / SCALED_W ))
+        [ "$COUNT" -lt 1 ] && COUNT=1
+        echo "Repeating the frame ${COUNT}x across ${WIDTH}px"
+        if [ "$COUNT" -eq 1 ]; then
+            VF="scale=-2:${HEIGHT},crop=${WIDTH}:${HEIGHT}"
+        else
+            LABELS=""
+            INPUTS=""
+            i=0
+            while [ "$i" -lt "$COUNT" ]; do
+                LABELS="${LABELS}[t${i}]"
+                INPUTS="${INPUTS}[t${i}]"
+                i=$((i + 1))
+            done
+            VF="scale=-2:${HEIGHT},split=${COUNT}${LABELS};${INPUTS}hstack=inputs=${COUNT},crop=${WIDTH}:${HEIGHT}"
+        fi
+        ;;
     *)
-        echo "Mode must be fit or fill; got '$MODE'" >&2
+        echo "Mode must be fit, fill or tile; got '$MODE'" >&2
         exit 2
         ;;
 esac
@@ -88,8 +124,13 @@ OUT="${STEM}.${SIZE}.mp4"
 REVERSE="${STEM}.${SIZE}.reverse.mp4"
 
 echo "Rendering $SRC at ${SIZE} (${MODE})..."
-ffmpeg -nostdin -v error -y -i "$SRC" -an -vf "$VF" \
-    -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+if [ "$MODE" = "tile" ] && [ "${COUNT:-1}" -gt 1 ]; then
+    ffmpeg -nostdin -v error -y -i "$SRC" -an -filter_complex "$VF" \
+        -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+else
+    ffmpeg -nostdin -v error -y -i "$SRC" -an -vf "$VF" \
+        -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
+fi
 
 echo "Building the reversed copy..."
 motion-player-reverse "$OUT" "$REVERSE"
