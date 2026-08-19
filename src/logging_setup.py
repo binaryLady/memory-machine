@@ -1,10 +1,16 @@
 """Centralised logging setup for motion-player."""
 from __future__ import annotations
 
+import atexit
 import logging
 import logging.handlers
 import os
+import queue
 from pathlib import Path
+
+# Kept module-level so repeated setup() calls (tests) can stop the previous
+# listener instead of leaking threads.
+_listener: logging.handlers.QueueListener | None = None
 
 
 def setup(log_level: str, log_max_mb: int, console: bool = False) -> logging.Logger:
@@ -45,15 +51,29 @@ def setup(log_level: str, log_max_mb: int, console: bool = False) -> logging.Log
     # Remove existing handlers so repeated calls in tests don't duplicate.
     for handler in root.handlers[:]:
         root.removeHandler(handler)
-    root.addHandler(file_handler)
 
-    # Without this, --verbose only raises the level and everything still goes
-    # to the log file, so a foreground run looks like it has hung.
+    # Log records cross a queue to a background thread that owns the actual
+    # file (and console) writes. The render loop has a 33ms frame budget; a
+    # log write that hits a slow SD card must not spend it.
+    global _listener
+    if _listener is not None:
+        _listener.stop()
+        _listener = None
+
+    sinks: list[logging.Handler] = [file_handler]
     if console:
+        # Without this, --verbose only raises the level and everything still
+        # goes to the log file, so a foreground run looks like it has hung.
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(fmt)
         console_handler.setLevel(logging.DEBUG)
-        root.addHandler(console_handler)
+        sinks.append(console_handler)
+
+    log_queue: queue.Queue = queue.Queue(maxsize=10000)
+    root.addHandler(logging.handlers.QueueHandler(log_queue))
+    _listener = logging.handlers.QueueListener(log_queue, *sinks, respect_handler_level=True)
+    _listener.start()
+    atexit.register(_listener.stop)
 
     # Dedicated transition logger; all sensor raw and accepted edges go here.
     transitions = logging.getLogger("motion-player.transitions")

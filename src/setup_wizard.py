@@ -214,10 +214,12 @@ def main() -> int:
     )
     if mode:
         if mode.startswith("gallery"):
+            text = set_ini_value(text, "system", "mode", "production")
             text = set_ini_value(text, "playback", "fullscreen", "true")
             # Always reset: a forgotten soak value must never stop the show.
             text = set_ini_value(text, "system", "exit_after_s", "0")
         else:
+            text = set_ini_value(text, "system", "mode", "test")
             text = set_ini_value(text, "playback", "fullscreen", "false")
             text = set_ini_value(text, "sensor", "sensor_type", "keyboard")
             text = set_ini_value(text, "playback", "idle_mode", "loop_forward")
