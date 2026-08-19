@@ -666,6 +666,16 @@ make install
 make clean
 ```
 
+Render this document as the published Field Manual page:
+
+```bash
+make manual
+```
+
+That writes `build/field-manual.html`. The published page is a copy of this
+file rather than a rendering of it, so it drifts until someone regenerates it —
+this is how.
+
 ---
 
 ## Troubleshooting
