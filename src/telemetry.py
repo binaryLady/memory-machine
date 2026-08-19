@@ -61,6 +61,7 @@ class Telemetry:
         self._batch_size = max(1, config.telemetry.batch_size)
         self._timeout_s = max(1, config.telemetry.timeout_s)
         self._log_tail_lines = max(0, config.telemetry.log_tail_lines)
+        self._mode = str(getattr(getattr(config, "system", None), "mode", "production"))
         self._log_path = log_path
         self._status = status
         self._queue: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1000)
@@ -152,8 +153,11 @@ class Telemetry:
             rejected_count=data.rejected_count,
             audio_sink=data.audio_sink,
             display_mode=snapshot.get("display_mode", "unknown"),
+            mode=self._mode,
             last_error=data.last_error,
-            log_tail=self._read_log_tail(),
+            # The tail itself is attached by the sender thread at send time;
+            # reading the log file here would block the render loop.
+            _wants_log_tail=self._mode == "test",
             **_health_fields(snapshot.get("extra") or {}),
         )
 
@@ -206,7 +210,19 @@ class Telemetry:
         if batch:
             self._send(batch)
 
+    def _attach_log_tails(self, batch: list[dict[str, Any]]) -> None:
+        """Resolve deferred log tails, on this (the sender) thread.
+
+        Test runs want the log for troubleshooting; production heartbeats stay
+        lean — the health figures travel, the log stays on disk. Reading the
+        file here keeps the cost off the render loop either way.
+        """
+        for item in batch:
+            if item.pop("_wants_log_tail", False):
+                item["log_tail"] = self._read_log_tail()
+
     def _send(self, batch: list[dict[str, Any]]) -> None:
+        self._attach_log_tails(batch)
         if not batch:
             return
         payload = json.dumps(batch, separators=(",", ":")).encode("utf-8")

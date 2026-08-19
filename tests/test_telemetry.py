@@ -134,6 +134,7 @@ def test_heartbeat_includes_log_tail() -> None:
         log_path = f.name
 
     tel = Telemetry(cfg, _fake_status(), Path(log_path))
+    tel._mode = "test"  # tails ride heartbeats in test runs only
     tel.start()
     tel.heartbeat()
     time.sleep(0.2)
@@ -217,3 +218,39 @@ def test_health_fields_survive_an_empty_or_partial_snapshot() -> None:
 
     assert _health_fields({}) == {}
     assert _health_fields({"playback": "not-a-dict"}) == {}
+
+
+def _quiet_config():
+    return _Config(_TelemetryConfig(enabled=False, endpoint_url="", interval_s=60,
+                                    batch_size=10, timeout_s=5, log_tail_lines=20))
+
+
+def test_production_heartbeats_travel_without_log_tails(tmp_path) -> None:
+    """Production stays lean: health figures travel, the log stays on disk."""
+    from telemetry import Telemetry
+
+    log = tmp_path / "motion-player.log"
+    log.write_text("line one\nline two\n")
+    sender = Telemetry(_quiet_config(), None, log_path=log)
+    sender._mode = "production"
+
+    batch = [{"type": "event", "event": "heartbeat", "_wants_log_tail": False}]
+    sender._attach_log_tails(batch)
+
+    assert "log_tail" not in batch[0]
+    assert "_wants_log_tail" not in batch[0], "the marker never reaches the wire"
+
+
+def test_test_runs_ship_the_log_for_troubleshooting(tmp_path) -> None:
+    from telemetry import Telemetry
+
+    log = tmp_path / "motion-player.log"
+    log.write_text("line one\nline two\n")
+    sender = Telemetry(_quiet_config(), None, log_path=log)
+    sender._mode = "test"
+
+    batch = [{"type": "event", "event": "heartbeat", "_wants_log_tail": True}]
+    sender._attach_log_tails(batch)
+
+    assert batch[0]["log_tail"] == ["line one\n", "line two\n"]
+    assert "_wants_log_tail" not in batch[0]

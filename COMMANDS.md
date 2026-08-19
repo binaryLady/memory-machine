@@ -377,6 +377,14 @@ silently ignored. Sleep and wake each emit a telemetry event, and
 For a timed soak test, `system.exit_after_s = 3600` stops the piece cleanly
 after an hour and emits a `shutdown` telemetry event. Leave it at 0 for a show.
 
+`system.mode` separates the two ways the piece runs. `test` logs everything at
+debug level and ships the log tail with every telemetry heartbeat, so a remote
+troubleshooter sees what happened without asking. `production` keeps the
+configured log level and sends heartbeats without log tails — the health
+figures travel, the log stays on disk. In both modes log writes go through a
+queue to a background thread, so a slow SD card can never stall a frame. The
+setup wizard sets the mode with its gallery/test presets.
+
 ---
 
 ## The heartbeat panel

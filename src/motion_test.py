@@ -240,8 +240,11 @@ def run(argv: list[str] | None = None) -> int:
         print("\nConfig OK")
         return 0
 
+    # Test runs are for troubleshooting, so they log everything; production
+    # keeps the configured level and the queue keeps writes off this thread.
+    level = "debug" if (args.verbose or cfg.system.mode == "test") else cfg.system.log_level
     logging_setup.setup(
-        "debug" if args.verbose else cfg.system.log_level,
+        level,
         cfg.system.log_max_mb,
         console=args.verbose,
     )

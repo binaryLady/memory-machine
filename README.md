@@ -243,6 +243,7 @@ sleep_start         = 00:00            ; HH:MM local; may span midnight
 sleep_end           = 08:00
 
 [system]
+mode                = production       ; production | test (test = debug logs + log tails in telemetry)
 log_level           = info
 exit_after_s        = 0                ; stop cleanly after N seconds; soak tests only             ; debug | info | warning | error
 log_max_mb          = 20               ; cap across all rotated files

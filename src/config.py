@@ -84,6 +84,7 @@ class ScheduleConfig:
 
 @dataclass(frozen=True)
 class SystemConfig:
+    mode: str
     log_level: str
     log_max_mb: int
     restart_on_crash: bool
@@ -184,6 +185,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "sleep_end": "08:00",
     },
     "system": {
+        "mode": "production",
         "log_level": "info",
         "log_max_mb": 20,
         "restart_on_crash": True,
@@ -202,6 +204,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 _VALID_IDLE_MODES = {"hold_first_frame", "loop_forward", "black"}
 _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
+_VALID_MODES = {"production", "test"}
 _VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
@@ -387,6 +390,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             sleep_end=str(schedule_raw.get("sleep_end", DEFAULTS["schedule"]["sleep_end"])),
         ),
         system=SystemConfig(
+            mode=str(system_raw.get("mode", DEFAULTS["system"]["mode"])),
             log_level=str(system_raw.get("log_level", DEFAULTS["system"]["log_level"])),
             log_max_mb=_parse_int(system_raw.get("log_max_mb"), DEFAULTS["system"]["log_max_mb"], 1),
             restart_on_crash=_parse_bool(system_raw.get("restart_on_crash"), DEFAULTS["system"]["restart_on_crash"]),
@@ -477,6 +481,11 @@ def validate(config: Config) -> list[str]:
 
     if config.system.log_max_mb < 1:
         problems.append("system.log_max_mb must be at least 1")
+
+    if config.system.mode not in _VALID_MODES:
+        problems.append(
+            f"system.mode must be one of {_VALID_MODES}; got {config.system.mode!r}"
+        )
 
     if config.schedule.enabled:
         for name, value in (
