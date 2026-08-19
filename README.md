@@ -126,6 +126,7 @@ reason and shows a black screen if the files are absent.
 
 | Command | What it does |
 | --- | --- |
+| `motion-player-setup` | guided configuration: screen shape, sensor, sleep hours, test mode |
 | `motion-player-toggle` | start/stop the piece (`--start`, `--stop`) |
 | `motion-player-status` | runtime state and resolved config (`--json`) |
 | `motion-player-update` | fetch, rebuild, reinstall, restart, roll back on failure |
@@ -201,6 +202,7 @@ i2c_bus             = 1
 i2c_address         = 0x27
 idle_bpm            = 60               ; heart rate at rest
 engaged_bpm         = 100              ; heart rate while listening
+sleep_bpm           = 0                ; overnight; 0 = still heart
 
 [sensor]
 sensor_type         = switch           ; switch | reed | beam | reflective |
@@ -241,7 +243,8 @@ sleep_start         = 00:00            ; HH:MM local; may span midnight
 sleep_end           = 08:00
 
 [system]
-log_level           = info             ; debug | info | warning | error
+log_level           = info
+exit_after_s        = 0                ; stop cleanly after N seconds; soak tests only             ; debug | info | warning | error
 log_max_mb          = 20               ; cap across all rotated files
 restart_on_crash    = true
 ```

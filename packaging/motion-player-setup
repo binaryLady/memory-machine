@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# motion-player-setup: guided configuration for the installation.
+set -euo pipefail
+
+APP_DIR=/opt/motion-player
+if [ -f "$APP_DIR/setup_wizard.py" ]; then
+    exec python3 "$APP_DIR/setup_wizard.py" "$@"
+fi
+# Development fallback: run from a checkout.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$HERE/src/setup_wizard.py" "$@"
