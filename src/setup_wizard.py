@@ -78,6 +78,19 @@ def render_prepare_hint(source: str, width: int, height: int, scaling: str) -> s
     return f"motion-player-prepare {source} --size {width}x{height} --mode {mode}"
 
 
+def audio_device_names() -> list[str]:
+    """Playback sinks as pygame sees them; empty when it cannot say."""
+    try:
+        import pygame  # type: ignore[import-untyped]
+
+        pygame.mixer.init()
+        from pygame._sdl2.audio import get_audio_device_names  # type: ignore[import-untyped]
+
+        return list(get_audio_device_names(False))
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def detected_screens() -> list[tuple[str, str]]:
     """(connector, preferred mode) for every connected output."""
     import display
@@ -188,6 +201,39 @@ def main() -> int:
         text = set_ini_value(text, "sensor", "sensor_type", sensor_type)
         if sensor_type == "switch":
             text = set_ini_value(text, "sensor", "gpio_pin", "4")
+
+    # 3b. Audio sink: pin it, so audio can never wander to a screen's speakers.
+    devices = audio_device_names()
+    if devices:
+        sink = _ask("Where does the audio come out?", devices + ["auto (first non-HDMI output)"])
+        if sink:
+            text = set_ini_value(text, "audio", "audio_sink",
+                                 "auto" if sink.startswith("auto") else sink)
+    else:
+        print("\n(Could not list audio devices here; audio_sink stays as configured.)")
+
+    # 3c. The forward reward.
+    reward = _ask(
+        "When a visitor stays through the whole rewind, the piece should:",
+        ["turn and play forward - the reward for staying present",
+         "fade to black and hold",
+         "start the rewind over"],
+    )
+    if reward:
+        value = {"t": "resume_forward", "f": "hold", "s": "loop_reverse"}[reward[0]]
+        text = set_ini_value(text, "playback", "on_rewind_end", value)
+
+    # 3d. The heartbeat panel.
+    lcd = _ask("Is the little LCD heartbeat panel connected?", ["yes", "no"])
+    if lcd:
+        text = set_ini_value(text, "lcd", "enabled", "true" if lcd == "yes" else "false")
+        if lcd == "yes":
+            address = input("Its I2C address [Enter keeps 0x27]: ").strip()
+            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x27"):
+                text = set_ini_value(text, "lcd", "i2c_address", address or "0x27")
+            else:
+                print("That doesn't look like an address; keeping 0x27.")
+                text = set_ini_value(text, "lcd", "i2c_address", "0x27")
 
     # 4. Sleep hours.
     wants_sleep = _ask("Sleep the piece overnight?", ["yes", "no"])
