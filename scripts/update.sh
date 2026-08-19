@@ -68,7 +68,7 @@ install_deb() {
             sudo -v || { log "ERROR: could not obtain sudo to install the package"; return 1; }
         fi
         set +e
-        sudo apt install --reinstall -y --allow-downgrades "$deb" 2>&1 | tee -a "$LOG"
+        sudo apt-get install --reinstall -y --allow-downgrades "$deb" 2>&1 | tee -a "$LOG"
         status=${PIPESTATUS[0]}
         set -e
         if [ "$status" != "0" ]; then
