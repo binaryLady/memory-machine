@@ -334,6 +334,26 @@ as primary in the desktop's screen settings.
 
 ---
 
+## The forward reward
+
+By default, a visitor who stays through the whole rewind is rewarded: when the
+picture reaches the beginning, it turns and plays forward, with the audio
+continuing. Letting go at any point still fades out and returns to the held
+frame.
+
+```ini
+[playback]
+on_rewind_end = resume_forward   ; the default
+```
+
+To toggle the reward off, choose what the end of the rewind does instead:
+`hold` fades the audio and holds a black screen; `loop_reverse` starts the
+rewind over from the end. Existing configs keep whatever they say — the default
+only applies where the key is absent, so enabling it on an installed Pi is one
+edit to `/etc/motion-player/config.ini`.
+
+---
+
 ## Sleeping overnight
 
 The piece can rest outside gallery hours: screens black, audio silent, sensor

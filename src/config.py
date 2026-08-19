@@ -142,7 +142,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "playback": {
         "idle_mode": "hold_first_frame",
         "reverse_rate": "native",
-        "on_rewind_end": "hold",
+        "on_rewind_end": "resume_forward",
         "scaling": "fit",
         "fullscreen": True,
         "display": "auto",

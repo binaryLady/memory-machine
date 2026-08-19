@@ -155,3 +155,15 @@ def test_looping_rewind_leaves_the_audio_alone() -> None:
 
     assert video.mode == "REVERSE"
     assert audio.fade_calls == 0
+
+
+def test_staying_present_through_the_rewind_earns_the_forward_pass() -> None:
+    """The reward: reach the beginning without letting go, and she plays on."""
+    sm, audio, video = _make_sm(rewind_end="resume_forward")
+    sm.handle("lift")
+
+    sm.handle("video_at_start")
+
+    assert video.mode == "FORWARD"
+    assert audio.fade_calls == 0, "the audio keeps playing into the reward"
+    assert sm.state == ENGAGED
