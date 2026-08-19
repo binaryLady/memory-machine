@@ -27,4 +27,4 @@ if [ -z "$DEB" ]; then
 fi
 
 echo "Installing $DEB"
-exec apt install --reinstall -y --allow-downgrades "$DEB"
+exec apt-get install --reinstall -y --allow-downgrades "$DEB"
