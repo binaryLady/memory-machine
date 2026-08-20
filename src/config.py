@@ -17,7 +17,27 @@ from typing import Any, Iterable
 
 LOGGER = logging.getLogger("motion-player.config")
 
-MEDIA_DIR = Path.home() / "memory-machine-media"
+
+def _operator_home() -> Path:
+    """The operator's home, even under sudo.
+
+    The setup wizard re-execs itself as root to write /etc, then validates the
+    config it wrote. Path.home() there is /root, so every relative media path
+    "fails" validation against a folder nobody uses. The media lives with the
+    user who runs the piece.
+    """
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        import pwd
+
+        try:
+            return Path(pwd.getpwnam(sudo_user).pw_dir)
+        except KeyError:
+            pass
+    return Path.home()
+
+
+MEDIA_DIR = _operator_home() / "memory-machine-media"
 
 
 @dataclass(frozen=True)
