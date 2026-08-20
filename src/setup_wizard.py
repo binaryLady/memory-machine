@@ -94,6 +94,26 @@ def parse_set_args(args: list[str]) -> list[tuple[str, str, str]]:
     return pairs
 
 
+def apply_run_mode(text: str, gallery: bool) -> str:
+    """Gallery vs test, as config edits.
+
+    Both modes render identically — test mode changes observability, never the
+    picture: the piece must look exactly as it will in the show, or the test
+    tests nothing. Asserting fullscreen here also repairs configs written back
+    when test mode forced a window.
+    """
+    text = set_ini_value(text, "playback", "fullscreen", "true")
+    if gallery:
+        text = set_ini_value(text, "system", "mode", "production")
+        # Always reset: a forgotten soak value must never stop the show.
+        text = set_ini_value(text, "system", "exit_after_s", "0")
+    else:
+        text = set_ini_value(text, "system", "mode", "test")
+        text = set_ini_value(text, "sensor", "sensor_type", "keyboard")
+        text = set_ini_value(text, "playback", "idle_mode", "loop_forward")
+    return text
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -287,20 +307,12 @@ def main() -> int:
     # 6. Gallery or test mode.
     mode = _ask(
         "Run mode?",
-        ["gallery (fullscreen, ready for the show)",
-         "test (windowed, spacebar triggers, loops)"],
+        ["gallery (ready for the show)",
+         "test (verbose logs, spacebar triggers, loops)"],
     )
     if mode:
-        if mode.startswith("gallery"):
-            text = set_ini_value(text, "system", "mode", "production")
-            text = set_ini_value(text, "playback", "fullscreen", "true")
-            # Always reset: a forgotten soak value must never stop the show.
-            text = set_ini_value(text, "system", "exit_after_s", "0")
-        else:
-            text = set_ini_value(text, "system", "mode", "test")
-            text = set_ini_value(text, "playback", "fullscreen", "false")
-            text = set_ini_value(text, "sensor", "sensor_type", "keyboard")
-            text = set_ini_value(text, "playback", "idle_mode", "loop_forward")
+        text = apply_run_mode(text, gallery=mode.startswith("gallery"))
+        if not mode.startswith("gallery"):
             soak = input("\nStop automatically after N seconds? [Enter = run until quit]: ").strip()
             if soak.isdigit() and int(soak) > 0:
                 text = set_ini_value(text, "system", "exit_after_s", soak)
