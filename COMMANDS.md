@@ -289,6 +289,36 @@ which builds its reverse at the same time and removes per-frame scaling:
 motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
 ```
 
+**Preparing renames the file, and the config must follow.** That command writes
+`piece_portrait.800x1280.mp4` (and its reverse) — it does not touch
+`piece_portrait.mp4`. The engine only plays files the config names; nothing
+scans the media folder, so a prepared clip the config doesn't mention is never
+used and the engine keeps scaling the unprepared original every frame.
+
+On a Pi that drives one screen, follow the paste flow: prepare prints the exact
+`[media]` lines when it finishes — paste them and restart. That sets
+`video_file` to the prepared clip, which also bypasses cut selection entirely.
+
+On a Pi whose media folder serves several screen shapes, the prepared name goes
+into the cut list instead, replacing the unprepared one:
+
+```ini
+[media]
+cuts = piece_square.mp4, piece_portrait.800x1280.mp4, piece_wide.mp4
+```
+
+The chooser reads real pixel dimensions from each file, not the name — the
+`800x1280` in the filename is bookkeeping for humans.
+
+**A rotated screen must use the paste flow, not `cuts`.** Cut selection sizes
+the screen from the pinned `display_mode`, which is the physical mode — a
+landscape panel mounted portrait behind a compositor transform still reads as
+landscape, so the chooser would score the portrait cut as the wrong shape.
+`video_file` names the clip outright and nothing second-guesses it. The setup
+wizard's printed prepare hint has the same blind spot: it uses the detected
+physical mode, so on a rotated panel ignore that one line and pass `--size`
+with the rotated (logical) resolution yourself.
+
 The screen shape is read from the pinned `display_mode`, or from what the sink
 advertises, before the window is opened. `playback.scaling` still covers
 whatever difference remains between the chosen cut and the screen.
