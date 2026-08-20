@@ -513,6 +513,32 @@ overnight it slows to `sleep_bpm` — 0 holds it still — while the backlight g
 dark and the panel says goodnight. It says hello for a few seconds at wake, and
 goodbye when the piece shuts down.
 
+### The panel's voice
+
+Every word and the icon are configurable — the wizard's heartbeat step offers
+it ("Customise the panel's text and icon?"), and because they are ordinary
+`[lcd]` keys, saved setups carry a panel voice per gallery:
+
+```ini
+[lcd]
+title         = her memory
+label_engaged = with you
+icon          = ring
+```
+
+Built-in icons all beat — a full and a relaxed shape alternate so they pulse
+rather than blink: `heart`, `star`, `ring`, `note`, `eye`, or `none` for a
+bare column. Or draw your own 5x8 icon: 8 comma-separated row values 0–31,
+top to bottom (each row is 5 bits), setting **both** shapes of the beat:
+
+```bash
+sudo motion-player-setup --set lcd.icon_full=0,10,31,31,31,14,4,0 --set lcd.icon_small=0,0,10,31,14,4,0,0
+```
+
+Panel text is printable ASCII only (the HD44780's character set garbles
+anything else) and up to 18 columns — the loader trims and warns rather than
+letting the glass show noise.
+
 The panel is driven from its own thread, never the render loop — an I2C write
 takes milliseconds against a 33ms frame budget. If it cannot be opened, or a
 write fails, the reason is logged and the piece carries on without it:
@@ -782,6 +808,15 @@ description, edit the comments in `config/config.default.ini` and run
 | `idle_bpm` | `60` | — |
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
+| `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. |
+| `label_idle` | `at rest` | — |
+| `label_engaged` | `listening` | — |
+| `label_hello` | `hello` | — |
+| `label_sleep` | `goodnight` | — |
+| `label_goodbye` | `goodbye` | — |
+| `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title. |
+| `icon_full` | `*(empty)*` | Or draw your own 5x8 icon: 8 comma-separated row values 0-31, top to bottom (each row is 5 bits, e.g. 0,10,31,31,31,14,4,0 is the heart). Set both — the full shape and the relaxed one it beats against. |
+| `icon_small` | `*(empty)*` | — |
 
 ### `[sensor]`
 
