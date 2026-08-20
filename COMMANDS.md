@@ -237,8 +237,10 @@ quadrant four ways — those three are applied after sizing (and after
 reflection, losing nothing — a ~1:2 portrait doubled becomes a square — and
 is applied before sizing, since it changes the frame's shape. The effect
 joins the filename — `piece.kaleidoscope.1280x800.mp4` — so variants live
-side by side and the config names the one that plays. None combine with
-`--mode tile`.
+side by side and the config names the one that plays. A non-default `--mode`
+joins it the same way — `piece.1280x800.fill.mp4` — because the mode decides
+the framing, and a render named only for its size would be ambiguous between a
+padded one and a cropped one. None combine with `--mode tile`.
 
 Anything else compositional — a different framing, a deliberate arrangement,
 motion that responds to the shape — belongs in an editor. Prepare the file
@@ -261,6 +263,15 @@ mirrored pair, `kaleidoscope`). Name profiles to build just those; renders
 already newer than their master are skipped, `--force` rebuilds. The portrait
 master is expected **pre-flipped** — its turn is baked in at export, so the
 rotated rectangles are pure scales.
+
+The VSDISPLAY profile renders `--mode fill`. The pre-flipped master is a wider
+shape than that panel, so the default `fit` pads it, and on a screen standing
+on its long edge those bars run down both sides of the piece. `fill` covers the
+panel and crops the overflow instead: from a 16:9 master that is about 5% off
+each end of the long axis, which is the top and bottom of the standing screen.
+Any profile whose master is not the panel's shape has the same choice to make —
+pad and show bars, crop and lose the edges, or re-export the master at the
+panel's shape and lose neither.
 
 Audit the shelf without rendering — every clip's true pixel dimensions,
 frame count, and whether its reverse exists (names can lie; this is what the
