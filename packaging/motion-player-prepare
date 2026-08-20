@@ -170,5 +170,12 @@ Done. Point the config at these:
   [playback]
   scaling      = ${MODE}
 
+Or, if this Pi serves several screen shapes, add it to the cut list instead —
+the engine only plays files the config names, so a prepared cut left out of
+[media] is never used:
+
+  [media]
+  cuts         = ..., $(basename "$OUT")
+
 The media now matches the output exactly, so playback does no scaling at all.
 EOF

@@ -289,6 +289,21 @@ which builds its reverse at the same time and removes per-frame scaling:
 motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
 ```
 
+**Preparing renames the file, and the config must follow.** That command writes
+`piece_portrait.800x1280.mp4` (and its reverse) — it does not touch
+`piece_portrait.mp4`. The engine only plays files the config names; nothing
+scans the media folder. So put the prepared name into `cuts` (or `video_file`),
+or the engine keeps choosing the unprepared original and scaling it every
+frame, which quietly undoes the whole point of preparing:
+
+```ini
+[media]
+cuts = piece_square.mp4, piece_portrait.800x1280.mp4, piece_wide.mp4
+```
+
+The chooser reads real pixel dimensions from each file, not the name — the
+`800x1280` in the filename is bookkeeping for humans.
+
 The screen shape is read from the pinned `display_mode`, or from what the sink
 advertises, before the window is opened. `playback.scaling` still covers
 whatever difference remains between the chosen cut and the screen.
