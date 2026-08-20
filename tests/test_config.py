@@ -159,3 +159,16 @@ def test_a_nonsense_icon_name_is_reported(tmp_path) -> None:
     cfg = config.load(str(path))
 
     assert [p for p in config.validate(cfg) if "lcd.icon" in p]
+
+
+def test_an_explicitly_empty_panel_text_means_blank_not_default() -> None:
+    assert config._parse_panel_text("", "at rest") == ""
+    assert config._parse_panel_text("   ", "at rest") == ""
+    assert config._parse_panel_text(None, "at rest") == "at rest"
+
+
+def test_a_nonsense_layout_is_reported(tmp_path) -> None:
+    path = _write(tmp_path, "[lcd]\nlayout = mural\n")
+    cfg = config.load(str(path))
+
+    assert [p for p in config.validate(cfg) if "lcd.layout" in p]

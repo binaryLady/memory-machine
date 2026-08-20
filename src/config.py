@@ -76,6 +76,7 @@ class LcdConfig:
     icon: str
     icon_full: tuple[int, ...] | None
     icon_small: tuple[int, ...] | None
+    layout: str
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "icon": "heart",
         "icon_full": "",
         "icon_small": "",
+        "layout": "status",
     },
     "sensor": {
         "sensor_type": "switch",
@@ -245,6 +247,7 @@ _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
 _VALID_MODES = {"production", "test"}
 _VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_LCD_ICONS = {"heart", "star", "ring", "note", "eye", "none"}
+_VALID_LCD_LAYOUTS = {"status", "art"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
     "none",
@@ -323,16 +326,23 @@ def _path_list(value: Any) -> tuple[Path, ...]:
 
 def _parse_panel_text(value: Any, default: str) -> str:
     """Panel strings must be printable ASCII — the HD44780's A00 charset
-    renders anything else as noise on the glass."""
+    renders anything else as noise on the glass.
+
+    An absent key means the shipped default; a key deliberately left empty
+    means blank — an icon-only panel (portrait-mounted, where ROM text would
+    lie sideways) says nothing at all.
+    """
     if value is None:
         return default
+    if not str(value).strip():
+        return ""
     text = "".join(ch for ch in str(value) if 32 <= ord(ch) < 127).strip()
-    if str(value).strip() and not text:
+    if not text:
         LOGGER.warning("Panel text %r has no ASCII characters; using %r", value, default)
         return default
     if len(text) > 18:
         LOGGER.warning("Panel text %r is longer than 18 columns and will be cut", text)
-    return text or default
+    return text
 
 
 def _parse_glyph(value: Any) -> tuple[int, ...] | None:
@@ -444,6 +454,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             icon=str(lcd_raw.get("icon", DEFAULTS["lcd"]["icon"])).strip().lower(),
             icon_full=_parse_glyph(lcd_raw.get("icon_full")),
             icon_small=_parse_glyph(lcd_raw.get("icon_small")),
+            layout=str(lcd_raw.get("layout", DEFAULTS["lcd"]["layout"])).strip().lower(),
         ),
         sensor=SensorConfig(
             sensor_type=str(sensor_raw.get("sensor_type", DEFAULTS["sensor"]["sensor_type"])),
@@ -543,6 +554,10 @@ def validate(config: Config) -> list[str]:
                 lcd.parse_icon_art(art.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 problems.append(f"lcd.icon art {art} cannot be used: {exc}")
+    if config.lcd.layout not in _VALID_LCD_LAYOUTS:
+        problems.append(
+            f"lcd.layout must be one of {sorted(_VALID_LCD_LAYOUTS)}; got {config.lcd.layout!r}"
+        )
     if (config.lcd.icon_full is None) != (config.lcd.icon_small is None):
         problems.append(
             "lcd.icon_full and lcd.icon_small come as a pair — the icon needs "

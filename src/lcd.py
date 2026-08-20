@@ -145,6 +145,17 @@ def parse_icon_art(text: str) -> PanelIcon:
     return PanelIcon(full=tiles(grids[0]), small=tiles(grids[1]), cols=cols, rows=rows)
 
 
+# Art layout: the icon centered on the panel, ROM asterisks twinkling around
+# it. Two scatter sets alternate with the beat — stars cost no glyph slots.
+STARS_A = ((0, 3), (0, 16), (1, 6), (2, 13), (3, 4), (3, 15))
+STARS_B = ((0, 8), (0, 12), (1, 14), (2, 5), (3, 9), (3, 18))
+
+
+def icon_origin(icon: PanelIcon) -> tuple[int, int]:
+    """Top-left cell that centers the icon on the 20x4 panel."""
+    return (ROWS - icon.rows) // 2, (COLUMNS - icon.cols) // 2
+
+
 def text_start(row_index: int, icon: PanelIcon | None) -> int:
     """First text column of a panel row: the icon owns its cells, text the rest."""
     if icon is not None and row_index < icon.rows:
@@ -186,11 +197,16 @@ def resolve_icon(config: Any) -> PanelIcon | None:
 
 
 def panel_labels(config: Any) -> dict[str, str]:
-    """The visitor-facing words, from config with the shipped defaults."""
-    return {
-        key: getattr(config, f"label_{key}", None) or default
-        for key, default in DEFAULT_LABELS.items()
-    }
+    """The visitor-facing words, from config with the shipped defaults.
+
+    An explicitly empty label stays empty — a deliberately silent panel —
+    while an absent one gets the shipped word.
+    """
+    labels = {}
+    for key, default in DEFAULT_LABELS.items():
+        value = getattr(config, f"label_{key}", None)
+        labels[key] = default if value is None else value
+    return labels
 
 
 def beat_is_full(elapsed_s: float, bpm: float) -> bool:
@@ -357,7 +373,9 @@ class Heartbeat:
         self._cpu_previous: tuple[int, int] | None = None
         self._icon = resolve_icon(self._config)
         self._labels = panel_labels(self._config)
-        self._title = getattr(self._config, "title", None) or DEFAULT_TITLE
+        title = getattr(self._config, "title", None)
+        self._title = DEFAULT_TITLE if title is None else title
+        self._layout = str(getattr(self._config, "layout", "status")).lower()
 
     def _open(self) -> Hd44780I2c | None:
         try:
@@ -457,7 +475,7 @@ class Heartbeat:
                 bpm = self._config.idle_bpm
 
             try:
-                if now >= next_stats:
+                if self._layout != "art" and now >= next_stats:
                     next_stats = now + 1.0
                     cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)
                     snapshot = self._status.snapshot()
@@ -482,11 +500,24 @@ class Heartbeat:
                 if self._icon is not None:
                     full = beat_is_full(now, bpm)
                     if full != last_full:
+                        origin_row, origin_col = (
+                            icon_origin(self._icon) if self._layout == "art" else (0, 0)
+                        )
                         base = 0 if full else len(self._icon.full)
                         for cell in range(len(self._icon.full)):
                             lcd.write_glyph_at(
-                                cell // self._icon.cols, cell % self._icon.cols, base + cell
+                                origin_row + cell // self._icon.cols,
+                                origin_col + cell % self._icon.cols,
+                                base + cell,
                             )
+                        if self._layout == "art":
+                            # Stars twinkle in counter-phase with the beat —
+                            # ROM asterisks, so they cost no glyph slots.
+                            shown, hidden = (STARS_A, STARS_B) if full else (STARS_B, STARS_A)
+                            for row, col in hidden:
+                                lcd.write_at(row, col, " ")
+                            for row, col in shown:
+                                lcd.write_at(row, col, "*")
                         last_full = full
             except Exception as exc:  # noqa: BLE001
                 LOGGER.error("LCD panel write failed; stopping the panel: %s", exc)
