@@ -10,7 +10,7 @@ on the Pi unless marked **(laptop)**.
 | Command | Flags | What it does |
 | --- | --- | --- |
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
-| `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
+| `motion-player-setup` | `--set section.key=value` `--save-setup NAME` `--load-setup NAME` `--list-setups` | guided configuration: setups menu (save/load/duplicate a named configuration), screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
@@ -704,6 +704,37 @@ playing.
 
 Look for `Config OK`. Missing media is reported as `media.video_file not
 found: …`, naming the exact path it tried.
+
+### Setups
+
+Each showing of the piece — a gallery, a format, a screen — is a
+configuration worth keeping. A **setup** is a named snapshot of the whole
+config, stored in `~/memory-machine-media/setups/<name>.ini`. Because setups
+live in the media folder, they travel with the content: copy the folder to
+another Pi and its setups arrive with it.
+
+The wizard opens with the setups menu — load one, save the current config
+under a name, or duplicate one. Duplication as a workflow: load the setup,
+walk the questions to tweak it, and save under the new name at the end (the
+wizard offers exactly that after writing). The same operations exist
+non-interactively:
+
+```bash
+motion-player-setup --save-setup vsdisplay-portrait
+```
+
+```bash
+motion-player-setup --load-setup vsdisplay-portrait
+```
+
+```bash
+motion-player-setup --list-setups
+```
+
+Loading is the same safe write as every wizard run: the previous config is
+backed up beside itself, and validation runs immediately. A setup that names
+renders this Pi does not have reports each missing file by exact path — build
+them with `motion-player-prepare-all` and the setup plays.
 
 ### Every key
 

@@ -160,6 +160,77 @@ def apply_render_choice(text: str, renders: list[str], picks: list[int]) -> str:
     return text
 
 
+def sanitize_setup_name(raw: str) -> str | None:
+    """A setup name as a safe filename stem, or None if nothing usable remains.
+
+    Lowercased, spaces become dashes, and only [a-z0-9-] survives — a name is
+    a label, never a path.
+    """
+    name = re.sub(r"[^a-z0-9-]", "", raw.strip().lower().replace(" ", "-"))
+    name = re.sub(r"-{2,}", "-", name).strip("-")
+    return name or None
+
+
+def setups_dir() -> Path:
+    import config as config_module
+
+    return config_module.MEDIA_DIR / "setups"
+
+
+def list_setups(directory: Path) -> list[str]:
+    if not directory.is_dir():
+        return []
+    return sorted(p.stem for p in directory.glob("*.ini"))
+
+
+def _chown_to_operator(*paths: Path) -> None:
+    """Setups belong to the operator, not root — the wizard runs under sudo,
+    but the media folder (and everything that travels with it) is hers."""
+    operator = os.environ.get("SUDO_USER")
+    if not operator:
+        return
+    try:
+        record = pwd.getpwnam(operator)
+    except KeyError:
+        return
+    for path in paths:
+        try:
+            os.chown(path, record.pw_uid, record.pw_gid)
+        except OSError:
+            pass
+
+
+def save_setup(text: str, name: str) -> Path:
+    """Store a config snapshot as a named setup in the media folder."""
+    directory = setups_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    destination = directory / f"{name}.ini"
+    destination.write_text(text, encoding="utf-8")
+    _chown_to_operator(directory, destination)
+    return destination
+
+
+def load_setup(name: str) -> int:
+    """Apply a saved setup as the live config, through the usual safe write."""
+    source = setups_dir() / f"{name}.ini"
+    if not source.exists():
+        known = ", ".join(list_setups(setups_dir())) or "none saved yet"
+        print(f"No setup named {name!r} (have: {known})")
+        return 1
+    print(f"Loading setup {name}:")
+    return _finish(source.read_text(encoding="utf-8"))
+
+
+def duplicate_setup(name: str, new_name: str) -> int:
+    source = setups_dir() / f"{name}.ini"
+    if not source.exists():
+        print(f"No setup named {name!r}")
+        return 1
+    destination = save_setup(source.read_text(encoding="utf-8"), new_name)
+    print(f"Duplicated {name} -> {destination.stem}")
+    return 0
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -237,9 +308,43 @@ def _restart_service() -> None:
 
 
 def main() -> int:
+    # Listing and saving read the world-readable config and write to the
+    # operator's own media folder — neither needs root, so they run before
+    # the sudo re-exec.
+    if "--list-setups" in sys.argv:
+        for name in list_setups(setups_dir()):
+            print(name)
+        return 0
+
+    if "--save-setup" in sys.argv:
+        args = sys.argv[1:]
+        if len(args) != 2 or args[0] != "--save-setup":
+            print("Usage: motion-player-setup --save-setup NAME")
+            return 2
+        name = sanitize_setup_name(args[1])
+        if not name:
+            print(f"Unusable setup name: {args[1]!r}")
+            return 2
+        if not CONFIG_PATH.exists():
+            print(f"No config at {CONFIG_PATH} to save.")
+            return 1
+        print(f"Saved setup: {save_setup(CONFIG_PATH.read_text(encoding='utf-8'), name)}")
+        return 0
+
     if os.geteuid() != 0:
         print("The config file is root-owned; re-running under sudo.")
         os.execvp("sudo", ["sudo", sys.executable] + sys.argv)
+
+    if "--load-setup" in sys.argv:
+        args = sys.argv[1:]
+        if len(args) != 2 or args[0] != "--load-setup":
+            print("Usage: motion-player-setup --load-setup NAME")
+            return 2
+        name = sanitize_setup_name(args[1])
+        if not name:
+            print(f"Unusable setup name: {args[1]!r}")
+            return 2
+        return load_setup(name)
 
     if "--set" in sys.argv:
         args = sys.argv[1:]
@@ -265,6 +370,45 @@ def main() -> int:
 
     print("memory-machine setup")
     print("====================")
+
+    # 0. Setups: each showing of the piece is a configuration worth keeping.
+    # Duplication is a workflow, not a button: load, walk the questions to
+    # tweak, save under the new name at the end.
+    saved = list_setups(setups_dir())
+    choices = ["walk through the questions"]
+    if saved:
+        choices.append("load a saved setup")
+    choices.append("save the current config as a setup")
+    if saved:
+        choices.append("duplicate a saved setup")
+    action = _ask(
+        "Setups" + (f" (saved: {', '.join(saved)})" if saved else ""), choices
+    )
+    if action and action.startswith("load"):
+        pick = _ask("Load which setup?", saved)
+        if pick:
+            code = load_setup(pick)
+            if code != 0:
+                return code
+            if input("\nWalk through the questions to tweak it? [y/N]: ").strip().lower() != "y":
+                return 0
+            text = CONFIG_PATH.read_text(encoding="utf-8")
+    elif action and action.startswith("save"):
+        name = sanitize_setup_name(input("Name for this setup: ").strip())
+        if not name:
+            print("That name had nothing usable in it; nothing saved.")
+            return 2
+        print(f"Saved setup: {save_setup(text, name)}")
+        return 0
+    elif action and action.startswith("duplicate"):
+        pick = _ask("Duplicate which setup?", saved)
+        if not pick:
+            return 0
+        name = sanitize_setup_name(input("New name: ").strip())
+        if not name:
+            print("That name had nothing usable in it; nothing duplicated.")
+            return 2
+        return duplicate_setup(pick, name)
 
     # 1. What is attached.
     screens = detected_screens()
@@ -383,7 +527,16 @@ def main() -> int:
             if soak.isdigit() and int(soak) > 0:
                 text = set_ini_value(text, "system", "exit_after_s", soak)
 
-    return _finish(text)
+    code = _finish(text)
+    if sys.stdin.isatty():
+        raw = input("\nSave this setup for re-use? name [Enter skips]: ").strip()
+        if raw:
+            name = sanitize_setup_name(raw)
+            if name:
+                print(f"Saved setup: {save_setup(text, name)}")
+            else:
+                print("That name had nothing usable in it; not saved.")
+    return code
 
 
 def _finish(text: str) -> int:

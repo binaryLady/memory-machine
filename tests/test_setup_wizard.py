@@ -214,3 +214,57 @@ def test_several_render_choices_become_the_cut_set() -> None:
     result = apply_render_choice(SAMPLE, renders, [1, 2])
 
     assert "cuts = piece_portrait.800x1280.mp4, piece.1280x800.mp4" in result
+
+
+def test_sanitize_setup_name_normalises_and_rejects_paths() -> None:
+    from setup_wizard import sanitize_setup_name
+
+    assert sanitize_setup_name("Gallery B / Portrait") == "gallery-b-portrait"
+    assert sanitize_setup_name("vsdisplay-portrait") == "vsdisplay-portrait"
+    assert sanitize_setup_name("../../etc/passwd") == "etcpasswd"
+    assert sanitize_setup_name("///") is None
+    assert sanitize_setup_name("   ") is None
+
+
+def test_setups_save_load_roundtrip(tmp_path, monkeypatch) -> None:
+    """A saved setup applies back verbatim through the safe write path."""
+    import setup_wizard
+
+    config = tmp_path / "config.ini"
+    config.write_text(SAMPLE, encoding="utf-8")
+    monkeypatch.setattr(setup_wizard, "CONFIG_PATH", config)
+    monkeypatch.setattr(setup_wizard, "setups_dir", lambda: tmp_path / "setups")
+
+    saved = setup_wizard.save_setup(SAMPLE, "gallery-a")
+    assert saved == tmp_path / "setups" / "gallery-a.ini"
+    assert saved.read_text(encoding="utf-8") == SAMPLE
+    assert setup_wizard.list_setups(tmp_path / "setups") == ["gallery-a"]
+
+    config.write_text("[playback]\nscaling = fill\n", encoding="utf-8")
+    assert setup_wizard.load_setup("gallery-a") == 0
+    assert config.read_text(encoding="utf-8") == SAMPLE
+    assert list(tmp_path.glob("config.ini.bak-*")), "the overwritten config was backed up"
+
+
+def test_loading_a_missing_setup_names_the_ones_that_exist(tmp_path, monkeypatch, capsys) -> None:
+    import setup_wizard
+
+    monkeypatch.setattr(setup_wizard, "setups_dir", lambda: tmp_path / "setups")
+    setup_wizard.save_setup(SAMPLE, "gallery-a")
+
+    assert setup_wizard.load_setup("nope") == 1
+    assert "gallery-a" in capsys.readouterr().out
+
+
+def test_duplicate_setup_copies_without_touching_the_original(tmp_path, monkeypatch) -> None:
+    import setup_wizard
+
+    monkeypatch.setattr(setup_wizard, "setups_dir", lambda: tmp_path / "setups")
+    setup_wizard.save_setup(SAMPLE, "gallery-a")
+
+    assert setup_wizard.duplicate_setup("gallery-a", "gallery-b") == 0
+    names = setup_wizard.list_setups(tmp_path / "setups")
+    assert names == ["gallery-a", "gallery-b"]
+    a = (tmp_path / "setups" / "gallery-a.ini").read_text(encoding="utf-8")
+    b = (tmp_path / "setups" / "gallery-b.ini").read_text(encoding="utf-8")
+    assert a == b == SAMPLE
