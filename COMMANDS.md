@@ -10,7 +10,7 @@ on the Pi unless marked **(laptop)**.
 | Command | Flags | What it does |
 | --- | --- | --- |
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
-| `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
+| `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° for a sideways-mounted panel), build its reverse, and offer to point the config at it; run per cut |
@@ -39,10 +39,11 @@ Two things worth committing to memory:
 ## Getting started
 
 The quickest route on a Pi that already has the package: run the guided setup.
-It shows what screen is attached, then walks through the shape, the sensor, the
-audio output, the forward reward, the heartbeat panel, the sleep hours,
-telemetry and gallery-vs-test mode — writing the config and offering a restart
-at the end:
+It shows what screen is attached, then walks through the shape, which of the
+finished renders in the media folder plays (pick one outright, or several as a
+shape-matched set), the sensor, the audio output, the forward reward, the
+heartbeat panel, the sleep hours, telemetry and gallery-vs-test mode — writing
+the config and offering a restart at the end:
 
 ```bash
 motion-player-setup

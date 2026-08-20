@@ -114,6 +114,52 @@ def apply_run_mode(text: str, gallery: bool) -> str:
     return text
 
 
+def discover_renders(media_dir: Path) -> list[str]:
+    """Playable renders in the media folder: clips whose reverse exists.
+
+    Reverse copies themselves are not offered — they are halves of a render,
+    not renders.
+    """
+    import playback_math
+
+    names = []
+    for clip in sorted(media_dir.glob("*.mp4")):
+        if clip.name.endswith(".reverse.mp4"):
+            continue
+        if (media_dir / playback_math.reverse_name(clip.name)).exists():
+            names.append(clip.name)
+    return names
+
+
+def parse_picks(raw: str, count: int) -> list[int]:
+    """"2" or "1,3" as unique 1-based indexes; raises ValueError otherwise."""
+    picks: list[int] = []
+    for part in raw.replace(",", " ").split():
+        if not part.isdigit() or not 1 <= int(part) <= count:
+            raise ValueError(part)
+        if int(part) not in picks:
+            picks.append(int(part))
+    if not picks:
+        raise ValueError(raw)
+    return picks
+
+
+def apply_render_choice(text: str, renders: list[str], picks: list[int]) -> str:
+    """One pick plays outright; several become a shape-matched cut set."""
+    import playback_math
+
+    if len(picks) == 1:
+        chosen = renders[picks[0] - 1]
+        text = set_ini_value(text, "media", "video_file", chosen)
+        text = set_ini_value(text, "media", "reverse_file", playback_math.reverse_name(chosen))
+        # A single choice is a curator's choice; nothing may second-guess it.
+        text = set_ini_value(text, "media", "cuts", "")
+    else:
+        text = set_ini_value(text, "media", "cuts",
+                             ", ".join(renders[p - 1] for p in picks))
+    return text
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -241,6 +287,26 @@ def main() -> int:
             hint = render_prepare_hint("~/memory-machine-media/piece.mp4", width, height,
                                        PRESETS[preset]["scaling"])
             print(f"\nTo render the media for this screen, run:\n  {hint}")
+
+    # 2b. Which render plays. Prepare leaves finished variants side by side in
+    # the media folder; this is where one of them is chosen for the screen.
+    import config as config_module
+
+    renders = discover_renders(config_module.MEDIA_DIR)
+    if renders:
+        print("\nRenders in the media folder (each with its reverse):")
+        for index, name in enumerate(renders, start=1):
+            print(f"  {index}. {name}")
+        raw = input("Which plays? One number, or several separated by commas "
+                    "for a shape-matched set [Enter keeps current]: ").strip()
+        while raw:
+            try:
+                picks = parse_picks(raw, len(renders))
+            except ValueError:
+                raw = input(f"Numbers 1-{len(renders)}, comma-separated: ").strip()
+                continue
+            text = apply_render_choice(text, renders, picks)
+            break
 
     # 3. Sensor.
     sensor = _ask(
