@@ -20,7 +20,10 @@ PROFILES="vsdisplay hosyond tekgroaml lianli square-double square-kaleido"
 
 profile_args() {
     case "$1" in
-        vsdisplay)      echo "$PORTRAIT_MASTER --size 1280x800" ;;
+        # fill, not the default fit: the pre-flipped master is a wider shape
+        # than this panel, so fit pads it and the bars land on the standing
+        # screen's long edges. fill covers it and crops the overflow instead.
+        vsdisplay)      echo "$PORTRAIT_MASTER --size 1280x800 --mode fill" ;;
         hosyond)        echo "$PORTRAIT_MASTER --size 800x480" ;;
         tekgroaml)      echo "$SQUARE_MASTER --size 720x720" ;;
         lianli)         echo "$SQUARE_MASTER --size 1920x480 --mode tile" ;;

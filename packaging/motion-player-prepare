@@ -46,6 +46,7 @@ motion-player-prepare — render the piece at the screen's resolution.
              --mode tile.
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
+A non-default --mode joins the name too: SRC.<WxH>.fill.mp4.
 USAGE
 }
 
@@ -193,8 +194,15 @@ fi
 
 STEM="${SRC%.*}"
 [ -n "$FX" ] && STEM="${STEM}.${FX}"
-OUT="${STEM}.${SIZE}.mp4"
-REVERSE="${STEM}.${SIZE}.reverse.mp4"
+
+# The mode decides the framing, so it belongs in the name the way --fx already
+# is. Without it a render called 1280x800 is ambiguous between a padded one and
+# a cropped one, and re-running with a different --mode finds the old file
+# already newer than the master and silently keeps it.
+NAME="$SIZE"
+[ "$MODE" != "fit" ] && NAME="${SIZE}.${MODE}"
+OUT="${STEM}.${NAME}.mp4"
+REVERSE="${STEM}.${NAME}.reverse.mp4"
 
 # Rendering is minutes of CPU, and these commands get re-run while working
 # through a set of cuts. An output already newer than its source is current;
