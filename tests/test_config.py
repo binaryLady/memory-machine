@@ -112,3 +112,20 @@ def test_the_forward_reward_is_the_default(tmp_path) -> None:
     cfg = config.load(str(path))
 
     assert cfg.playback.on_rewind_end == "resume_forward"
+
+
+def test_operator_home_follows_sudo_user(monkeypatch) -> None:
+    """Validation under sudo must check the operator's media folder, not root's."""
+    import os
+    import pwd
+
+    me = pwd.getpwuid(os.getuid())
+    monkeypatch.setenv("SUDO_USER", me.pw_name)
+
+    assert config._operator_home() == config.Path(me.pw_dir)
+
+
+def test_operator_home_falls_back_for_an_unknown_sudo_user(monkeypatch) -> None:
+    monkeypatch.setenv("SUDO_USER", "no-such-user-here")
+
+    assert config._operator_home() == config.Path.home()
