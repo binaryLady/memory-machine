@@ -1,4 +1,4 @@
-.PHONY: deb release install lint check icons manual uninstall clean help
+.PHONY: deb release install lint check docs-check docs-sync icons manual uninstall clean help
 
 PKG := motion-player
 
@@ -9,6 +9,8 @@ help:
 	@echo "  install   Install the most recently built .deb"
 	@echo "  lint      Syntax-check scripts and Python files"
 	@echo "  check     Run pytest suite"
+	@echo "  docs-check Audit COMMANDS.md against installed commands, flags, config keys"
+	@echo "  docs-sync Regenerate COMMANDS.md's config reference from config.default.ini"
 	@echo "  icons     Regenerate icon sizes from packaging/make_icon.py"
 	@echo "  manual    Render COMMANDS.md as build/field-manual.html"
 	@echo "  uninstall Remove the installed package"
@@ -48,6 +50,12 @@ lint:
 
 check:
 	python3 -m pytest tests/ -v
+
+docs-check:
+	python3 scripts/check_docs.py
+
+docs-sync:
+	python3 scripts/check_docs.py --sync
 
 icons:
 	python3 packaging/make_icon.py
