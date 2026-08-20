@@ -10,10 +10,10 @@ on the Pi unless marked **(laptop)**.
 | Command | Flags | What it does |
 | --- | --- | --- |
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
-| `motion-player-setup` | — | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode |
+| `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` | render a cut at the screen's resolution and build its reverse; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution, build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
@@ -193,7 +193,9 @@ usually much faster than encoding on the Pi.
 
 For an installation that loops all day, render the piece at the screen's own
 resolution once rather than scaling every frame on the Pi. This writes both the
-sized clip and its reversed copy, and prints the config lines to paste:
+sized clip and its reversed copy, then offers to point the config at them — it
+knows the exact names it just rendered, so nothing is retyped. `--apply` says
+yes up front, `--no-apply` prints the config lines instead:
 
 ```bash
 motion-player-prepare
@@ -295,8 +297,8 @@ motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
 scans the media folder, so a prepared clip the config doesn't mention is never
 used and the engine keeps scaling the unprepared original every frame.
 
-On a Pi that drives one screen, follow the paste flow: prepare prints the exact
-`[media]` lines when it finishes — paste them and restart. That sets
+On a Pi that drives one screen, let prepare do it: when it finishes it offers
+to write the config itself (`--apply` skips the question). That sets
 `video_file` to the prepared clip, which also bypasses cut selection entirely.
 
 On a Pi whose media folder serves several screen shapes, the prepared name goes
@@ -310,7 +312,7 @@ cuts = piece_square.mp4, piece_portrait.800x1280.mp4, piece_wide.mp4
 The chooser reads real pixel dimensions from each file, not the name — the
 `800x1280` in the filename is bookkeeping for humans.
 
-**A rotated screen must use the paste flow, not `cuts`.** Cut selection sizes
+**A rotated screen must use the `video_file` flow, not `cuts`.** Cut selection sizes
 the screen from the pinned `display_mode`, which is the physical mode — a
 landscape panel mounted portrait behind a compositor transform still reads as
 landscape, so the chooser would score the portrait cut as the wrong shape.

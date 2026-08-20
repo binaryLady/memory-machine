@@ -78,6 +78,22 @@ def render_prepare_hint(source: str, width: int, height: int, scaling: str) -> s
     return f"motion-player-prepare {source} --size {width}x{height} --mode {mode}"
 
 
+def parse_set_args(args: list[str]) -> list[tuple[str, str, str]]:
+    """--set arguments as (section, key, value) triples.
+
+    Each looks like media.video_file=piece.800x1280.mp4 — section.key, then
+    the value after the first equals sign.
+    """
+    pairs = []
+    for arg in args:
+        target, sep, value = arg.partition("=")
+        section, dot, key = target.partition(".")
+        if not sep or not dot or not section or not key:
+            raise ValueError(f"--set takes section.key=value; got {arg!r}")
+        pairs.append((section, key, value))
+    return pairs
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -158,6 +174,22 @@ def main() -> int:
     if os.geteuid() != 0:
         print("The config file is root-owned; re-running under sudo.")
         os.execvp("sudo", ["sudo", sys.executable] + sys.argv)
+
+    if "--set" in sys.argv:
+        args = sys.argv[1:]
+        values = [args[i + 1] for i, arg in enumerate(args)
+                  if arg == "--set" and i + 1 < len(args)]
+        leftovers = [arg for i, arg in enumerate(args)
+                     if arg != "--set" and (i == 0 or args[i - 1] != "--set")]
+        if leftovers or len(values) != args.count("--set"):
+            print("Usage: motion-player-setup [--set section.key=value ...]")
+            return 2
+        try:
+            pairs = parse_set_args(values)
+        except ValueError as exc:
+            print(exc)
+            return 2
+        return apply_settings(pairs)
 
     source = CONFIG_PATH if CONFIG_PATH.exists() else PACKAGED_DEFAULT
     if not source.exists():
@@ -273,7 +305,11 @@ def main() -> int:
             if soak.isdigit() and int(soak) > 0:
                 text = set_ini_value(text, "system", "exit_after_s", soak)
 
-    # 7. Write, validate, offer a restart.
+    return _finish(text)
+
+
+def _finish(text: str) -> int:
+    """Write, validate, offer a restart. The ending both entry points share."""
     if CONFIG_PATH.exists():
         backup = CONFIG_PATH.with_name(
             f"config.ini.bak-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -298,11 +334,32 @@ def main() -> int:
     else:
         print("Config OK")
 
+    if not sys.stdin.isatty():
+        print("Apply with: motion-player-toggle --stop && motion-player-toggle --start")
+        return 0
     if input("\nRestart the piece now? [y/N]: ").strip().lower() == "y":
         _restart_service()
     else:
         print("Apply later with: motion-player-toggle --stop && motion-player-toggle --start")
     return 0
+
+
+def apply_settings(pairs: list[tuple[str, str, str]]) -> int:
+    """Write the given values without asking anything — the tools' entry point.
+
+    motion-player-prepare knows the exact media names it just rendered; this
+    lets it hand them straight to the config instead of asking the operator to
+    retype them.
+    """
+    source = CONFIG_PATH if CONFIG_PATH.exists() else PACKAGED_DEFAULT
+    if not source.exists():
+        print(f"No config found at {CONFIG_PATH} or {PACKAGED_DEFAULT}.")
+        return 1
+    text = source.read_text(encoding="utf-8")
+    for section, key, value in pairs:
+        text = set_ini_value(text, section, key, value)
+        print(f"  {section}.{key} = {value}")
+    return _finish(text)
 
 
 if __name__ == "__main__":
