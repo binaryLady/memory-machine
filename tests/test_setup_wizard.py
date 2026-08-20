@@ -268,3 +268,32 @@ def test_duplicate_setup_copies_without_touching_the_original(tmp_path, monkeypa
     a = (tmp_path / "setups" / "gallery-a.ini").read_text(encoding="utf-8")
     b = (tmp_path / "setups" / "gallery-b.ini").read_text(encoding="utf-8")
     assert a == b == SAMPLE
+
+
+ALSA_CARDS = """\
+ 0 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0
+                      vc4-hdmi-0
+ 1 [vc4hdmi1       ]: vc4-hdmi - vc4-hdmi-1
+                      vc4-hdmi-1
+ 2 [Device         ]: USB-Audio - USB Audio Device
+                      C-Media Electronics Inc. USB Audio Device at usb-0000:01:00.0-1.3
+"""
+
+
+def test_alsa_cards_parse_includes_the_usb_adapter() -> None:
+    from setup_wizard import parse_alsa_cards
+
+    assert parse_alsa_cards(ALSA_CARDS) == ["vc4-hdmi-0", "vc4-hdmi-1", "USB Audio Device"]
+
+
+def test_alsa_cards_parse_survives_garbage() -> None:
+    from setup_wizard import parse_alsa_cards
+
+    assert parse_alsa_cards("") == []
+    assert parse_alsa_cards("no cards at all\n") == []
+
+
+def test_alsa_cards_degrade_to_empty_off_pi() -> None:
+    import setup_wizard
+
+    assert isinstance(setup_wizard.alsa_cards(), list)

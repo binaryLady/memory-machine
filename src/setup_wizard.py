@@ -231,6 +231,29 @@ def duplicate_setup(name: str, new_name: str) -> int:
     return 0
 
 
+def parse_alsa_cards(text: str) -> list[str]:
+    """Card names from /proc/asound/cards content.
+
+    A line reads ` 2 [Device ]: USB-Audio - USB Audio Device`; the part after
+    the last ` - ` is the human name, and the engine's substring matching
+    means it works as an audio_sink value directly.
+    """
+    names = []
+    for line in text.splitlines():
+        match = re.match(r"\s*\d+\s+\[.+?\]:\s*(.+)", line)
+        if match:
+            names.append(match.group(1).split(" - ")[-1].strip())
+    return names
+
+
+def alsa_cards() -> list[str]:
+    """Sound cards the kernel sees, even when SDL's enumeration misses one."""
+    try:
+        return parse_alsa_cards(Path("/proc/asound/cards").read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -465,14 +488,30 @@ def main() -> int:
             text = set_ini_value(text, "sensor", "gpio_pin", "4")
 
     # 3b. Audio sink: pin it, so audio can never wander to a screen's speakers.
+    # SDL's enumeration can miss a card the kernel sees (the USB adapter, on
+    # the first hardware night), so the kernel's own list is merged in and a
+    # by-hand entry is always offered. Matching is substring-based in the
+    # engine, so "USB Audio Device" — or just "USB" — finds the adapter.
     devices = audio_device_names()
-    if devices:
-        sink = _ask("Where does the audio come out?", devices + ["auto (first non-HDMI output)"])
-        if sink:
-            text = set_ini_value(text, "audio", "audio_sink",
-                                 "auto" if sink.startswith("auto") else sink)
-    else:
-        print("\n(Could not list audio devices here; audio_sink stays as configured.)")
+    cards = [
+        card for card in alsa_cards()
+        if not any(card.lower() in dev.lower() or dev.lower() in card.lower()
+                   for dev in devices)
+    ]
+    options = (
+        devices
+        + [f"{card} (sound card)" for card in cards]
+        + ["auto (first non-HDMI output)", "type a device name by hand"]
+    )
+    sink = _ask("Where does the audio come out?", options)
+    if sink:
+        if sink.startswith("type"):
+            raw = input("Device name (matched as a substring, e.g. USB): ").strip()
+            if raw:
+                text = set_ini_value(text, "audio", "audio_sink", raw)
+        else:
+            value = "auto" if sink.startswith("auto") else sink.removesuffix(" (sound card)")
+            text = set_ini_value(text, "audio", "audio_sink", value)
 
     # 3c. The forward reward.
     reward = _ask(
