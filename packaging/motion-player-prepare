@@ -34,13 +34,16 @@ motion-player-prepare — render the piece at the screen's resolution.
              happens once here, not per frame at playback; give --size as
              the panel's native (unrotated) mode, e.g. --size 1280x800
              --rotate cw for a 1280x800 panel standing on its side
-  --fx       mirror-h | mirror-v | kaleidoscope — bake a seamless symmetry
-             into the render. mirror-h reflects the left half across a
-             vertical center line, mirror-v the top half downward, and
-             kaleidoscope mirrors the top-left quadrant four ways. Applied
-             after sizing (and rotation), so the seam is exact and centered.
-             The output name carries the effect: piece.kaleidoscope.WxH.mp4.
-             Does not combine with --mode tile.
+  --fx       double-h | mirror-h | mirror-v | kaleidoscope — bake a seamless
+             symmetry into the render. double-h sets the whole frame beside
+             its own reflection (a ~1:2 portrait doubled becomes a square;
+             applied before sizing, since it changes the aspect). mirror-h
+             reflects the left half across a vertical center line, mirror-v
+             the top half downward, and kaleidoscope mirrors the top-left
+             quadrant four ways — those three are applied after sizing, so
+             the seam is exact and centered. The output name carries the
+             effect: piece.kaleidoscope.WxH.mp4. Does not combine with
+             --mode tile.
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
 USAGE
@@ -70,8 +73,8 @@ case "$ROTATE" in
 esac
 
 case "$FX" in
-    ""|mirror-h|mirror-v|kaleidoscope) ;;
-    *) echo "--fx must be mirror-h, mirror-v or kaleidoscope; got '$FX'" >&2; exit 2 ;;
+    ""|double-h|mirror-h|mirror-v|kaleidoscope) ;;
+    *) echo "--fx must be double-h, mirror-h, mirror-v or kaleidoscope; got '$FX'" >&2; exit 2 ;;
 esac
 if [ -n "$FX" ] && [ "$MODE" = "tile" ]; then
     echo "--fx does not combine with --mode tile" >&2
@@ -160,17 +163,14 @@ case "$MODE" in
         ;;
 esac
 
-# The turn happens here, once, rather than in a compositor transform at
-# playback: rotation before scaling, so --size stays the panel's native mode.
-if [ -n "$ROTATE" ]; then
-    T=1
-    [ "$ROTATE" = "ccw" ] && T=2
-    VF="transpose=${T},${VF}"
-fi
-
-# Symmetries after sizing, so the reflection seam is exact and centered on the
-# final frame. These use filter graph labels, hence -filter_complex below.
+# double-h changes the frame's aspect (a ~1:2 portrait doubled is a square),
+# so it must run before sizing; the reflective symmetries run after sizing so
+# the seam is exact and centered on the final frame. All use filter graph
+# labels, hence -filter_complex below.
 case "$FX" in
+    double-h)
+        VF="split[da][db];[db]hflip[dc];[da][dc]hstack,${VF}"
+        ;;
     mirror-h)
         VF="${VF},crop=iw/2:ih:0:0,split[fa][fb];[fb]hflip[fc];[fa][fc]hstack"
         ;;
@@ -181,6 +181,15 @@ case "$FX" in
         VF="${VF},crop=iw/2:ih/2:0:0,split=4[ka][kb][kc][kd];[kb]hflip[kb1];[kc]vflip[kc1];[kd]hflip,vflip[kd1];[ka][kb1]hstack[kt];[kc1][kd1]hstack[kk];[kt][kk]vstack"
         ;;
 esac
+
+# The turn happens here, once, rather than in a compositor transform at
+# playback. Prefixed last so it leads the whole chain: rotation before any
+# effect or scaling, and --size stays the panel's native mode.
+if [ -n "$ROTATE" ]; then
+    T=1
+    [ "$ROTATE" = "ccw" ] && T=2
+    VF="transpose=${T},${VF}"
+fi
 
 STEM="${SRC%.*}"
 [ -n "$FX" ] && STEM="${STEM}.${FX}"

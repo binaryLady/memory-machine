@@ -109,6 +109,9 @@ chmod 0755 "$STAGE/usr/bin/motion-player-display"
 cp "$REPO_ROOT/packaging/motion-player-prepare" "$STAGE/usr/bin/motion-player-prepare"
 chmod 0755 "$STAGE/usr/bin/motion-player-prepare"
 
+cp "$REPO_ROOT/packaging/motion-player-prepare-all" "$STAGE/usr/bin/motion-player-prepare-all"
+chmod 0755 "$STAGE/usr/bin/motion-player-prepare-all"
+
 cp "$REPO_ROOT/packaging/motion-player-setup" "$STAGE/usr/bin/motion-player-setup"
 chmod 0755 "$STAGE/usr/bin/motion-player-setup"
 

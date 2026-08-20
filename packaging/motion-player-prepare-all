@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# motion-player-prepare-all: build the whole render library in one command.
+#
+# Every screen the show might plug in gets its render built ahead of time from
+# the two masters, so switching screens is a wizard answer, not a render. This
+# builds a shelf and chooses nothing: every render is --no-apply, and the
+# setup wizard's picker is where a render is chosen for the attached screen.
+set -euo pipefail
+
+MEDIA_DIR="${MEDIA_DIR:-$HOME/memory-machine-media}"
+SQUARE_MASTER="${SQUARE_MASTER:-$MEDIA_DIR/piece.mp4}"
+PORTRAIT_MASTER="${PORTRAIT_MASTER:-$MEDIA_DIR/piece_portrait.mp4}"
+
+# The portrait master is exported already turned (the flip is baked in), so
+# the physically-rotated rectangles are pure scales — no --rotate here.
+# luckfox (800x1280 natively-portrait DSI) is deferred: the flipped master
+# would lie sideways on it; when that panel is wired, add a profile with
+# --rotate ccw or point it at a dedicated master.
+PROFILES="vsdisplay hosyond tekgroaml lianli square-double square-kaleido"
+
+profile_args() {
+    case "$1" in
+        vsdisplay)      echo "$PORTRAIT_MASTER --size 1280x800" ;;
+        hosyond)        echo "$PORTRAIT_MASTER --size 800x480" ;;
+        tekgroaml)      echo "$SQUARE_MASTER --size 720x720" ;;
+        lianli)         echo "$SQUARE_MASTER --size 1920x480 --mode tile" ;;
+        # If the squares read sideways on glass (the flipped master carries
+        # its turn into them), add --rotate ccw to these two lines.
+        square-double)  echo "$PORTRAIT_MASTER --size 720x720 --fx double-h" ;;
+        square-kaleido) echo "$PORTRAIT_MASTER --size 720x720 --fx kaleidoscope" ;;
+        *) return 1 ;;
+    esac
+}
+
+usage() {
+    cat <<USAGE
+motion-player-prepare-all — render the library for every screen at once.
+
+  motion-player-prepare-all [PROFILE ...] [--force]
+  motion-player-prepare-all --report
+
+  Profiles: $PROFILES
+  With no profiles named, all of them are built. Renders whose output is
+  already newer than its master are skipped; --force rebuilds regardless.
+
+  --report  render nothing; print every clip in the media folder with its
+            true dimensions, frame count, and whether its reverse exists.
+
+  Masters: $SQUARE_MASTER (square), $PORTRAIT_MASTER (portrait, pre-flipped).
+  Override with SQUARE_MASTER= / PORTRAIT_MASTER= / MEDIA_DIR=.
+USAGE
+}
+
+probe() {
+    ffprobe -v error -select_streams v:0 \
+        -show_entries "stream=$1" -of default=nokey=1:noprint_wrappers=1 "$2" 2>/dev/null | head -n1
+}
+
+shape_of() {
+    local w="$1" h="$2"
+    if [ "$w" -eq "$h" ]; then echo square
+    elif [ "$w" -lt "$h" ]; then echo portrait
+    else echo landscape
+    fi
+}
+
+report() {
+    if ! command -v ffprobe >/dev/null 2>&1; then
+        echo "ffprobe is not installed. Run: sudo apt install -y ffmpeg" >&2
+        exit 1
+    fi
+    printf '%-45s %-11s %-7s %-8s %-8s %-9s %s\n' \
+        FILE SIZE FPS FRAMES SECONDS REVERSE SHAPE
+    local clip w h fps frames dur reverse shape verdict
+    for clip in "$MEDIA_DIR"/*.mp4; do
+        [ -e "$clip" ] || continue
+        case "$clip" in *.reverse.mp4) continue ;; esac
+        w="$(probe width "$clip")"; h="$(probe height "$clip")"
+        fps="$(probe r_frame_rate "$clip")"
+        frames="$(probe nb_frames "$clip")"
+        dur="$(probe duration "$clip")"
+        reverse=no
+        [ -f "${clip%.*}.reverse.mp4" ] && reverse=yes
+        if [ -n "$w" ] && [ -n "$h" ]; then
+            shape="$(shape_of "$w" "$h")"
+            verdict="$shape"
+            # A 1080p frame usually means an editor canvas export — the piece
+            # may be letterboxed inside it with the bars baked into the pixels.
+            [ "${w}x${h}" = "1920x1080" ] && verdict="$shape — 1080p canvas? check for baked bars"
+            printf '%-45s %-11s %-7s %-8s %-8s %-9s %s\n' \
+                "$(basename "$clip")" "${w}x${h}" "${fps%%/*}" "${frames:--}" "${dur%%.*}" "$reverse" "$verdict"
+        else
+            printf '%-45s %s\n' "$(basename "$clip")" "unreadable — ffprobe could not open it"
+        fi
+    done
+}
+
+FORCE_FLAG=""
+REQUESTED=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --report) report; exit 0 ;;
+        --force) FORCE_FLAG="--force"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+        *)
+            if ! profile_args "$1" >/dev/null; then
+                echo "Unknown profile: $1 (know: $PROFILES)" >&2
+                exit 2
+            fi
+            REQUESTED="$REQUESTED $1"
+            shift
+            ;;
+    esac
+done
+REQUESTED="${REQUESTED:-$PROFILES}"
+
+PREPARE="$(command -v motion-player-prepare || true)"
+[ -n "$PREPARE" ] || PREPARE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/motion-player-prepare"
+
+built=0
+skipped=0
+for name in $REQUESTED; do
+    args="$(profile_args "$name")"
+    master="${args%% *}"
+    if [ ! -f "$master" ]; then
+        echo "== $name: SKIPPED — master not found: $master"
+        skipped=$((skipped + 1))
+        continue
+    fi
+    echo "== $name"
+    # shellcheck disable=SC2086 — args is a constructed argument list
+    "$PREPARE" $args --no-apply $FORCE_FLAG
+    built=$((built + 1))
+done
+
+echo
+echo "Library done: $built profile(s) built, $skipped skipped."
+echo "Choose what plays on this screen with: motion-player-setup"
