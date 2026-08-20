@@ -134,3 +134,34 @@ def test_apply_settings_edits_the_config_and_backs_it_up(tmp_path, monkeypatch, 
     backups = list(tmp_path.glob("config.ini.bak-*"))
     assert len(backups) == 1
     assert backups[0].read_text(encoding="utf-8") == SAMPLE
+
+
+def test_test_mode_renders_exactly_like_the_show() -> None:
+    """Test mode is observability, never a different picture."""
+    from setup_wizard import apply_run_mode
+
+    result = apply_run_mode(SAMPLE, gallery=False)
+
+    assert "fullscreen          = true" in result
+    assert "mode = test" in result
+    assert "false" not in result.split("fullscreen")[1].splitlines()[0]
+
+
+def test_gallery_mode_asserts_fullscreen_and_clears_soak() -> None:
+    from setup_wizard import apply_run_mode
+
+    result = apply_run_mode(SAMPLE, gallery=True)
+
+    assert "fullscreen          = true" in result
+    assert "mode = production" in result
+    assert "exit_after_s = 0" in result
+
+
+def test_either_mode_repairs_a_config_that_test_mode_once_windowed() -> None:
+    """Old configs have fullscreen=false baked in from the old test mode."""
+    from setup_wizard import apply_run_mode, set_ini_value
+
+    stale = set_ini_value(SAMPLE, "playback", "fullscreen", "false")
+
+    for gallery in (True, False):
+        assert "fullscreen          = true" in apply_run_mode(stale, gallery=gallery)
