@@ -67,6 +67,15 @@ class LcdConfig:
     idle_bpm: float
     engaged_bpm: float
     sleep_bpm: float
+    title: str
+    label_idle: str
+    label_engaged: str
+    label_hello: str
+    label_sleep: str
+    label_goodbye: str
+    icon: str
+    icon_full: tuple[int, ...] | None
+    icon_small: tuple[int, ...] | None
 
 
 @dataclass(frozen=True)
@@ -182,6 +191,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "idle_bpm": 60.0,
         "engaged_bpm": 100.0,
         "sleep_bpm": 0.0,
+        "title": "memory-machine",
+        "label_idle": "at rest",
+        "label_engaged": "listening",
+        "label_hello": "hello",
+        "label_sleep": "goodnight",
+        "label_goodbye": "goodbye",
+        "icon": "heart",
+        "icon_full": "",
+        "icon_small": "",
     },
     "sensor": {
         "sensor_type": "switch",
@@ -226,6 +244,7 @@ _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
 _VALID_MODES = {"production", "test"}
 _VALID_SCALING = {"fit", "fill", "stretch"}
+_VALID_LCD_ICONS = {"heart", "star", "ring", "note", "eye", "none"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
     "none",
@@ -300,6 +319,35 @@ def _path_list(value: Any) -> tuple[Path, ...]:
     if value is None or not str(value).strip():
         return ()
     return tuple(_resolve_path(part.strip()) for part in str(value).split(",") if part.strip())
+
+
+def _parse_panel_text(value: Any, default: str) -> str:
+    """Panel strings must be printable ASCII — the HD44780's A00 charset
+    renders anything else as noise on the glass."""
+    if value is None:
+        return default
+    text = "".join(ch for ch in str(value) if 32 <= ord(ch) < 127).strip()
+    if str(value).strip() and not text:
+        LOGGER.warning("Panel text %r has no ASCII characters; using %r", value, default)
+        return default
+    if len(text) > 18:
+        LOGGER.warning("Panel text %r is longer than 18 columns and will be cut", text)
+    return text or default
+
+
+def _parse_glyph(value: Any) -> tuple[int, ...] | None:
+    """A hand-drawn 5x8 glyph: 8 comma-separated row values, each 0-31."""
+    if value is None or not str(value).strip():
+        return None
+    try:
+        rows = tuple(int(part.strip(), 0) for part in str(value).split(","))
+    except ValueError:
+        LOGGER.warning("Invalid glyph %r; expected 8 comma-separated numbers", value)
+        return None
+    if len(rows) != 8 or not all(0 <= row <= 31 for row in rows):
+        LOGGER.warning("Invalid glyph %r; needs exactly 8 rows, each 0-31", value)
+        return None
+    return rows
 
 
 def _parse_i2c_address(value: Any) -> int | None:
@@ -383,6 +431,19 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
                 lcd_raw.get("engaged_bpm"), DEFAULTS["lcd"]["engaged_bpm"], 1.0, 300.0
             ),
             sleep_bpm=_parse_float(lcd_raw.get("sleep_bpm"), DEFAULTS["lcd"]["sleep_bpm"], 0.0, 300.0),
+            title=_parse_panel_text(lcd_raw.get("title"), DEFAULTS["lcd"]["title"]),
+            label_idle=_parse_panel_text(lcd_raw.get("label_idle"), DEFAULTS["lcd"]["label_idle"]),
+            label_engaged=_parse_panel_text(
+                lcd_raw.get("label_engaged"), DEFAULTS["lcd"]["label_engaged"]
+            ),
+            label_hello=_parse_panel_text(lcd_raw.get("label_hello"), DEFAULTS["lcd"]["label_hello"]),
+            label_sleep=_parse_panel_text(lcd_raw.get("label_sleep"), DEFAULTS["lcd"]["label_sleep"]),
+            label_goodbye=_parse_panel_text(
+                lcd_raw.get("label_goodbye"), DEFAULTS["lcd"]["label_goodbye"]
+            ),
+            icon=str(lcd_raw.get("icon", DEFAULTS["lcd"]["icon"])).strip().lower(),
+            icon_full=_parse_glyph(lcd_raw.get("icon_full")),
+            icon_small=_parse_glyph(lcd_raw.get("icon_small")),
         ),
         sensor=SensorConfig(
             sensor_type=str(sensor_raw.get("sensor_type", DEFAULTS["sensor"]["sensor_type"])),
@@ -466,6 +527,16 @@ def validate(config: Config) -> list[str]:
     if config.playback.scaling not in _VALID_SCALING:
         problems.append(
             f"playback.scaling must be one of {_VALID_SCALING}; got {config.playback.scaling!r}"
+        )
+
+    if config.lcd.icon not in _VALID_LCD_ICONS:
+        problems.append(
+            f"lcd.icon must be one of {sorted(_VALID_LCD_ICONS)}; got {config.lcd.icon!r}"
+        )
+    if (config.lcd.icon_full is None) != (config.lcd.icon_small is None):
+        problems.append(
+            "lcd.icon_full and lcd.icon_small come as a pair — the icon needs "
+            "both its full and its relaxed shape to beat"
         )
 
     dm = config.playback.display_mode

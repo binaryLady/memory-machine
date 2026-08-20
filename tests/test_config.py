@@ -129,3 +129,33 @@ def test_operator_home_falls_back_for_an_unknown_sudo_user(monkeypatch) -> None:
     monkeypatch.setenv("SUDO_USER", "no-such-user-here")
 
     assert config._operator_home() == config.Path.home()
+
+
+def test_panel_text_is_forced_to_printable_ascii() -> None:
+    assert config._parse_panel_text("with you", "x") == "with you"
+    assert config._parse_panel_text("cœur ♥", "at rest") == "cur"
+    assert config._parse_panel_text("♥♥♥", "at rest") == "at rest"
+    assert config._parse_panel_text(None, "at rest") == "at rest"
+
+
+def test_glyphs_parse_as_eight_rows_of_five_bits() -> None:
+    assert config._parse_glyph("0,10,31,31,31,14,4,0") == (0, 10, 31, 31, 31, 14, 4, 0)
+    assert config._parse_glyph("") is None
+    assert config._parse_glyph("1,2,3") is None
+    assert config._parse_glyph("0,10,31,31,31,14,4,99") is None
+    assert config._parse_glyph("not,a,glyph,at,all,no,no,no") is None
+
+
+def test_an_unpaired_custom_icon_is_reported(tmp_path) -> None:
+    path = _write(tmp_path, "[lcd]\nicon_full = 0,10,31,31,31,14,4,0\n")
+    cfg = config.load(str(path))
+
+    problems = [p for p in config.validate(cfg) if "icon" in p]
+    assert problems, "half a beating pair must be called out"
+
+
+def test_a_nonsense_icon_name_is_reported(tmp_path) -> None:
+    path = _write(tmp_path, "[lcd]\nicon = dragon\n")
+    cfg = config.load(str(path))
+
+    assert [p for p in config.validate(cfg) if "lcd.icon" in p]

@@ -130,3 +130,65 @@ def test_the_backlight_bit_toggles() -> None:
 
     panel.set_backlight(True)
     assert bus.writes[-1] & 0x08 == 0x08, "backlight bit must be set"
+
+
+def test_custom_title_and_labels_reach_the_panel() -> None:
+    rows = lcd.format_rows("IDLE", 5.0, 40.0, 3, 60, label="dreaming", title="her memory")
+
+    assert rows[0].startswith("  her memory")
+    assert rows[1].startswith("  dreaming")
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+
+
+def test_state_label_speaks_the_configured_words() -> None:
+    words = {"idle": "waiting", "engaged": "with you", "hello": "good morning",
+             "sleep": "dreaming", "goodbye": "farewell"}
+
+    assert lcd.state_label("ENGAGED", labels=words) == "with you"
+    assert lcd.state_label("SLEEP", labels=words) == "dreaming"
+    assert lcd.state_label("IDLE", 1.0, labels=words) == "good morning"
+    assert lcd.state_label("IDLE", 99.0, labels=words) == "waiting"
+
+
+def test_farewell_uses_the_configured_voice() -> None:
+    rows = lcd.farewell_rows("her memory", "farewell")
+
+    assert rows[0].startswith("  her memory")
+    assert rows[1].startswith("  farewell")
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+
+
+def test_every_builtin_glyph_pair_fits_the_hardware() -> None:
+    """8 rows of 5 bits each — anything else garbles the CGRAM write."""
+    for name, (full, small) in lcd.GLYPHS.items():
+        for shape in (full, small):
+            assert len(shape) == 8, name
+            assert all(0 <= row <= 31 for row in shape), name
+
+
+class _LcdStub:
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+
+def test_resolve_icon_prefers_the_hand_drawn_pair() -> None:
+    drawn = ((1,) * 8, (2,) * 8)
+    config = _LcdStub(icon="star", icon_full=drawn[0], icon_small=drawn[1])
+
+    assert lcd.resolve_icon(config) == drawn
+
+
+def test_resolve_icon_falls_back_to_the_heart_on_nonsense() -> None:
+    assert lcd.resolve_icon(_LcdStub(icon="dragon")) == lcd.GLYPHS["heart"]
+
+
+def test_resolve_icon_none_means_a_bare_column() -> None:
+    assert lcd.resolve_icon(_LcdStub(icon="none")) is None
+
+
+def test_panel_labels_fill_gaps_with_the_shipped_words() -> None:
+    labels = lcd.panel_labels(_LcdStub(label_engaged="with you"))
+
+    assert labels["engaged"] == "with you"
+    assert labels["idle"] == "at rest"
+    assert labels["goodbye"] == "goodbye"
