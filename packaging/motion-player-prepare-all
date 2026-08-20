@@ -76,7 +76,9 @@ report() {
         [ -e "$clip" ] || continue
         case "$clip" in *.reverse.mp4) continue ;; esac
         w="$(probe width "$clip")"; h="$(probe height "$clip")"
-        fps="$(probe r_frame_rate "$clip")"
+        # r_frame_rate is a fraction — NTSC sources report 30000/1001, and
+        # printing the bare numerator reads as thirty thousand fps.
+        fps="$(probe r_frame_rate "$clip" | awk -F/ '{ if (NF == 2 && $2 > 0) printf "%.2f", $1 / $2; else print $1 }')"
         frames="$(probe nb_frames "$clip")"
         dur="$(probe duration "$clip")"
         reverse=no
@@ -88,7 +90,7 @@ report() {
             # may be letterboxed inside it with the bars baked into the pixels.
             [ "${w}x${h}" = "1920x1080" ] && verdict="$shape — 1080p canvas? check for baked bars"
             printf '%-45s %-11s %-7s %-8s %-8s %-9s %s\n' \
-                "$(basename "$clip")" "${w}x${h}" "${fps%%/*}" "${frames:--}" "${dur%%.*}" "$reverse" "$verdict"
+                "$(basename "$clip")" "${w}x${h}" "${fps:--}" "${frames:--}" "${dur%%.*}" "$reverse" "$verdict"
         else
             printf '%-45s %s\n' "$(basename "$clip")" "unreadable — ffprobe could not open it"
         fi
