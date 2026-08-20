@@ -19,24 +19,29 @@ usage() {
     cat <<'USAGE'
 motion-player-prepare — render the piece at the screen's resolution.
 
-  motion-player-prepare [SRC] [--size 1920x1080] [--mode fit|fill]
+  motion-player-prepare [SRC] [--size 1920x1080] [--mode fit|fill] [--apply|--no-apply]
 
-  SRC      source clip (default: piece.mp4 in the media folder)
-  --size   target resolution (default: what the connected screen reports)
-  --force  rebuild even when the outputs are already up to date
-  --mode   fit  keep the whole frame, pad with black (default)
-           fill cover the screen, crop the overflow
-           tile repeat the frame across the screen instead of cropping
+  SRC        source clip (default: piece.mp4 in the media folder)
+  --size     target resolution (default: what the connected screen reports)
+  --force    rebuild even when the outputs are already up to date
+  --mode     fit  keep the whole frame, pad with black (default)
+             fill cover the screen, crop the overflow
+             tile repeat the frame across the screen instead of cropping
+  --apply    point the config at the rendered files without asking
+  --no-apply render only; print the config lines instead
 
-Writes SRC.<WxH>.mp4 and its reversed copy, then prints the config lines.
+Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
 USAGE
 }
 
+APPLY=ask
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --mode) MODE="${2:-}"; shift 2 ;;
+        --apply) APPLY=yes; shift ;;
+        --no-apply) APPLY=no; shift ;;
         -h|--help) usage; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; usage; exit 2 ;;
         *) SRC="$1"; shift ;;
@@ -159,7 +164,36 @@ else
     motion-player-reverse "$OUT" "$REVERSE"
 fi
 
-cat <<EOF
+# The engine only plays files the config names, so the rendered clip must be
+# written into [media] to be used at all. Tiled output already matches the
+# screen exactly, and "tile" is not a runtime scaling value — fit is.
+SCALING="$MODE"
+[ "$MODE" = "tile" ] && SCALING=fit
+
+apply_config() {
+    local setup
+    setup="$(command -v motion-player-setup || true)"
+    [ -n "$setup" ] || setup="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/motion-player-setup"
+    "$setup" \
+        --set "media.video_file=$(basename "$OUT")" \
+        --set "media.reverse_file=$(basename "$REVERSE")" \
+        --set "playback.scaling=${SCALING}"
+}
+
+if [ "$APPLY" = "ask" ] && [ -t 0 ]; then
+    printf '\nPoint the config at %s now? [Y/n]: ' "$(basename "$OUT")"
+    read -r answer
+    case "$answer" in n|N|no|NO) APPLY=no ;; *) APPLY=yes ;; esac
+fi
+
+if [ "$APPLY" = "yes" ]; then
+    echo
+    echo "Updating the config:"
+    apply_config
+    echo
+    echo "The media now matches the output exactly, so playback does no scaling at all."
+else
+    cat <<EOF
 
 Done. Point the config at these:
 
@@ -168,11 +202,13 @@ Done. Point the config at these:
   reverse_file = $(basename "$REVERSE")
 
   [playback]
-  scaling      = ${MODE}
+  scaling      = ${SCALING}
 
-Or, if this Pi's media folder serves several screen shapes, add it to the cut
-list instead — the engine only plays files the config names, so a prepared cut
-left out of [media] is never used:
+Or apply them without retyping: rerun with --apply.
+
+If this Pi's media folder serves several screen shapes, add the clip to the
+cut list instead — the engine only plays files the config names, so a prepared
+cut left out of [media] is never used:
 
   [media]
   cuts         = ..., $(basename "$OUT")
@@ -182,3 +218,4 @@ its physical shape there, so on one use the video_file lines above.)
 
 The media now matches the output exactly, so playback does no scaling at all.
 EOF
+fi

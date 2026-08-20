@@ -1,7 +1,9 @@
-"""Setup wizard tests: the pure config-editing helpers only."""
+"""Setup wizard tests: the pure config-editing helpers and the --set path."""
 from __future__ import annotations
 
-from setup_wizard import render_prepare_hint, set_ini_value
+import pytest
+
+from setup_wizard import parse_set_args, render_prepare_hint, set_ini_value
 
 SAMPLE = """; the shipped comment survives edits
 [playback]
@@ -86,3 +88,49 @@ def test_audio_device_listing_degrades_to_empty_off_pi() -> None:
     import setup_wizard
 
     assert isinstance(setup_wizard.audio_device_names(), list)
+
+
+def test_parse_set_args_reads_section_key_and_value() -> None:
+    pairs = parse_set_args([
+        "media.video_file=piece.800x1280.mp4",
+        "playback.scaling=fit",
+    ])
+
+    assert pairs == [
+        ("media", "video_file", "piece.800x1280.mp4"),
+        ("playback", "scaling", "fit"),
+    ]
+
+
+def test_parse_set_args_splits_on_the_first_equals_only() -> None:
+    """A value may itself contain an equals sign."""
+    pairs = parse_set_args(["system.extra=a=b"])
+
+    assert pairs == [("system", "extra", "a=b")]
+
+
+@pytest.mark.parametrize("bad", ["scaling=fit", "playback.scaling", "=fit", "playback.=x"])
+def test_parse_set_args_rejects_malformed_input(bad: str) -> None:
+    with pytest.raises(ValueError):
+        parse_set_args([bad])
+
+
+def test_apply_settings_edits_the_config_and_backs_it_up(tmp_path, monkeypatch, capsys) -> None:
+    """The prepare handoff: values land in the file, the old file survives."""
+    import setup_wizard
+
+    config = tmp_path / "config.ini"
+    config.write_text(SAMPLE, encoding="utf-8")
+    monkeypatch.setattr(setup_wizard, "CONFIG_PATH", config)
+
+    result = setup_wizard.apply_settings(
+        [("media", "video_file", "piece.800x1280.mp4"), ("playback", "scaling", "fill")]
+    )
+
+    assert result == 0
+    written = config.read_text(encoding="utf-8")
+    assert "video_file = piece.800x1280.mp4" in written
+    assert "scaling             = fill" in written
+    backups = list(tmp_path.glob("config.ini.bak-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == SAMPLE
