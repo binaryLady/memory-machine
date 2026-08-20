@@ -13,7 +13,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° for a sideways-mounted panel), build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--fx mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
@@ -219,10 +219,26 @@ is left alone, so re-running them while working through a set of cuts costs
 nothing. Editing a source makes its outputs stale again and they rebuild. Pass
 `--force` to rebuild regardless.
 
-Those three are mechanical. Anything compositional — a different framing, a
-deliberate arrangement, motion that responds to the shape — belongs in an editor.
-Prepare the file however you like and hand the result to `motion-player-reverse`,
-which builds the reversed copy from whatever you give it.
+Those three are mechanical, and one family of compositional moves is built in
+because it must be pixel-exact against the output to be seamless — the
+symmetries:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece.mp4 --size 1280x800 --fx kaleidoscope
+```
+
+`mirror-h` reflects the left half across a vertical center line, `mirror-v`
+reflects the top half downward, and `kaleidoscope` mirrors the top-left
+quadrant four ways. Each is applied after sizing (and after `--rotate`), so
+the seam lands exactly on the center of the finished frame. The effect joins
+the filename — `piece.kaleidoscope.1280x800.mp4` — so variants live side by
+side and the config names the one that plays. They do not combine with
+`--mode tile`.
+
+Anything else compositional — a different framing, a deliberate arrangement,
+motion that responds to the shape — belongs in an editor. Prepare the file
+however you like and hand the result to `motion-player-reverse`, which builds
+the reversed copy from whatever you give it.
 
 **Preparing the portrait cut needs an explicit `--size`**, because the default
 comes from the screen this Pi is attached to, which is the wrong shape for it:
