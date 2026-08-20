@@ -530,9 +530,19 @@ def validate(config: Config) -> list[str]:
         )
 
     if config.lcd.icon not in _VALID_LCD_ICONS:
-        problems.append(
-            f"lcd.icon must be one of {sorted(_VALID_LCD_ICONS)}; got {config.lcd.icon!r}"
-        )
+        art = MEDIA_DIR / "icons" / f"{config.lcd.icon}.txt"
+        if not art.exists():
+            problems.append(
+                f"lcd.icon must be one of {sorted(_VALID_LCD_ICONS)} or name a "
+                f"pixel-art file; got {config.lcd.icon!r} and {art} does not exist"
+            )
+        else:
+            import lcd
+
+            try:
+                lcd.parse_icon_art(art.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                problems.append(f"lcd.icon art {art} cannot be used: {exc}")
     if (config.lcd.icon_full is None) != (config.lcd.icon_small is None):
         problems.append(
             "lcd.icon_full and lcd.icon_small come as a pair — the icon needs "

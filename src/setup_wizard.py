@@ -512,17 +512,22 @@ def main() -> int:
                         text = set_ini_value(text, "lcd", key, answer)
                 import lcd as lcd_module
 
-                icons = sorted(lcd_module.GLYPHS) + [
-                    "none (bare column)",
-                    "custom (draw it yourself in the config)",
-                ]
+                art_dir = config_module.MEDIA_DIR / "icons"
+                art = sorted(p.stem for p in art_dir.glob("*.txt")) if art_dir.is_dir() else []
+                icons = (
+                    sorted(lcd_module.GLYPHS)
+                    + [f"{name} (your pixel art)" for name in art]
+                    + ["none (bare column)",
+                       "custom (draw your own, up to 10x16 pixels)"]
+                )
                 icon = _ask("Which icon beats beside the title?", icons)
                 if icon and icon.startswith("custom"):
                     print(
-                        "\nDraw a 5x8 icon as 8 comma-separated row values 0-31,"
-                        "\ntop to bottom, and set both shapes it beats between:"
-                        "\n  sudo motion-player-setup --set lcd.icon_full=0,10,31,31,31,14,4,0"
-                        " --set lcd.icon_small=0,0,10,31,14,4,0,0"
+                        "\nDraw it as pixel art in "
+                        f"{art_dir}/<name>.txt:"
+                        "\n# for lit, . for dark; 5 or 10 pixels wide, 8 or 16 tall;"
+                        "\nthe full shape, a line of ---, then the relaxed shape it"
+                        "\nbeats against. Rerun setup and it appears in this menu."
                     )
                 elif icon:
                     text = set_ini_value(text, "lcd", "icon", icon.split(" ")[0])
