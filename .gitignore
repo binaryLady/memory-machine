@@ -24,3 +24,33 @@ dist/
 *.log
 state.json
 status.json
+
+# Secrets — never commit, even locally generated
+.env
+.env.*
+*.pem
+*.key
+*.p12
+id_rsa*
+wpa_supplicant.conf
+
+# Agent / editor local state (may hold permission allowlists and machine paths)
+.claude/settings.local.json
+.claude/worktrees/
+
+# Python virtualenvs
+venv/
+.venv/
+
+# Live config — the deployed copy at /etc/motion-player/config.ini is not
+# tracked; this guards a local copy landing in the repo. config.default.ini is.
+config/config.ini
+
+# Personal footage. The piece's media lives in ~/memory-machine-media, outside
+# the repo; this catches a stray copy dropped here while testing.
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.m4a
+memory-machine-media/
