@@ -705,6 +705,102 @@ playing.
 Look for `Config OK`. Missing media is reported as `media.video_file not
 found: …`, naming the exact path it tried.
 
+### Every key
+
+Generated from the shipped defaults, so it cannot drift — to change a
+description, edit the comments in `config/config.default.ini` and run
+`make docs-sync`:
+
+<!-- config-reference:begin — generated from config/config.default.ini by scripts/check_docs.py --sync; edit the ini comments, not this block -->
+
+### `[media]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `video_file` | `piece.mp4` | Paths may be absolute or relative to ~/memory-machine-media/ |
+| `audio_file` | `piece.wav` | — |
+| `reverse_file` | `piece.reverse.mp4` | Pre-reversed copy of video_file, built by motion-player-reverse. The rewind plays this forward so no frame is ever seeked to. |
+| `cuts` | `*(empty)*` | Optional alternative cuts of the same piece, framed for different screen shapes. The one closest in shape to the attached screen is used; video_file above is the fallback. Each needs its own reversed copy, named the same way motion-player-reverse writes it (piece_portrait.mp4 -> piece_portrait.reverse.mp4). |
+
+### `[playback]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `idle_mode` | `hold_first_frame` | idle_mode: hold_first_frame \| loop_forward \| black |
+| `reverse_rate` | `native` | reverse_rate: native \| fit_to_audio \| <float multiplier> |
+| `on_rewind_end` | `resume_forward` | on_rewind_end: what happens when the rewind reaches the beginning while the visitor is still listening. resume_forward  the piece turns and plays forward — the reward for staying present (default) hold            the screen goes black and the audio fades with it loop_reverse    the rewind starts over from the end |
+| `scaling` | `fit` | scaling: fit \| fill \| stretch — how the frame meets a screen of a different shape. fit keeps all of it and pads with black, fill covers the screen and crops the overflow, stretch distorts to fill. |
+| `fullscreen` | `true` | — |
+| `display` | `auto` | display: auto \| HDMI-A-1 \| HDMI-A-2 (which connector to drive) |
+| `display_mode` | `auto` | display_mode: auto \| 1920x1080@60 — pinned on every start, so a screen that was off at boot cannot leave the output negotiated to something else. |
+
+### `[audio]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `audio_sink` | `auto` | ALSA/PipeWire device NAME, not index. Use "auto" for first non-HDMI output. |
+| `volume` | `0.8` | Fixed volume, 0.0–1.0. Staff cannot change this at runtime. |
+| `fade_out_ms` | `400` | Fade-out length when the headphones are replaced. |
+| `on_audio_end` | `silence` | on_audio_end: silence \| loop |
+
+### `[lcd]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `enabled` | `false` | An optional 20x4 character LCD on I2C showing a beating heart and health figures. The heart quickens while the headphones are lifted. |
+| `idle_bpm` | `60` | — |
+| `engaged_bpm` | `100` | — |
+| `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
+
+### `[sensor]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `sensor_type` | `switch` | sensor_type: switch \| reed \| beam \| reflective \| capacitive \| distance \| hall \| pir \| mmwave \| gpio_raw \| keyboard \| none "none" means no sensor is fitted: the piece loops forward and never rewinds. May be a fused list, e.g. switch+beam. |
+| `sensor_combine` | `any` | sensor_combine: any \| all  (used only when fusing multiple sensors) |
+| `engaged_when` | `open` | engaged_when: open \| closed — which raw electrical state means "lifted" |
+| `gpio_pin` | `4` | --- digital backends: switch, reed, beam, reflective, hall, pir, gpio_raw --- |
+| `pull_up` | `true` | — |
+| `trigger_pin` | `23` | --- distance backends --- |
+| `echo_pin` | `24` | — |
+| `threshold_cm` | `15` | — |
+| `touch_channel` | `0` | --- capacitive --- |
+| `bounce_time_ms` | `50` | --- timing, all backends --- First-level hardware/library debounce (ms). |
+| `min_lift_ms` | `250` | How long a raw state must persist before it is accepted (ms). |
+| `min_replace_ms` | `250` | — |
+| `max_engaged_minutes` | `30` | Force back to idle if engaged this long (minutes). |
+
+### `[schedule]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `enabled` | `false` | Sleep the piece overnight: screens black, audio silent, sensor ignored, LCD dark with a "goodnight". Times are HH:MM local; a window may span midnight (23:00 to 08:00). start == end disables the window. |
+| `sleep_start` | `00:00` | — |
+| `sleep_end` | `08:00` | — |
+
+### `[system]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `mode` | `production` | mode: production \| test. Test runs keep their logs to themselves; only production heartbeats carry log tails to the telemetry endpoint, and only while the piece is awake. |
+| `log_level` | `info` | — |
+| `exit_after_s` | `0` | Stop cleanly after this many seconds; 0 = run forever. Soak tests only — leave at 0 for a show. |
+| `log_max_mb` | `20` | — |
+| `restart_on_crash` | `true` | — |
+
+### `[telemetry]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `enabled` | `false` | Send HTTP POSTs to a remote endpoint for monitoring. Only http:// and https:// URLs are accepted. |
+| `endpoint_url` | `https://lab.thetechmargin.com/memorymachine/api/telemetry` | — |
+| `interval_s` | `60` | — |
+| `batch_size` | `10` | — |
+| `timeout_s` | `5` | — |
+| `log_tail_lines` | `20` | — |
+
+<!-- config-reference:end -->
+
 ---
 
 ## Testing without the headphone sensor

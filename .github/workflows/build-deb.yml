@@ -30,6 +30,7 @@ jobs:
         run: |
           make lint
           make check
+          make docs-check
 
       - name: Build release .deb
         run: make release
