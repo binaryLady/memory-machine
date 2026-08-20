@@ -10,7 +10,7 @@ on the Pi unless marked **(laptop)**.
 | Command | Flags | What it does |
 | --- | --- | --- |
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
-| `motion-player-setup` | — | guided configuration: screen shape, sensor, sleep, test mode |
+| `motion-player-setup` | — | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` | render a cut at the screen's resolution and build its reverse; run per cut |
@@ -40,8 +40,9 @@ Two things worth committing to memory:
 
 The quickest route on a Pi that already has the package: run the guided setup.
 It shows what screen is attached, then walks through the shape, the sensor, the
-audio output, the forward reward, the heartbeat panel, the sleep hours and
-gallery-vs-test mode — writing the config and offering a restart at the end:
+audio output, the forward reward, the heartbeat panel, the sleep hours,
+telemetry and gallery-vs-test mode — writing the config and offering a restart
+at the end:
 
 ```bash
 motion-player-setup
@@ -823,6 +824,33 @@ loop hides the problem.
 **A command appears to do nothing.** The launcher redirects output to the log
 unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
+
+**Is the switch itself wired and working?** Probe the physical switch directly,
+with no engine in the way. Stop the service first (the engine holds the GPIO),
+then run this from your home directory — lgpio writes its FIFOs to the working
+directory, so a read-only one fails:
+
+```bash
+motion-player-toggle --stop
+```
+
+```bash
+cd ~ && python3 - <<'EOF'
+from gpiozero import Button
+from signal import pause
+b = Button(4, pull_up=True, bounce_time=0.05)
+print("watching GPIO 4 — flip the switch; Ctrl+C to stop")
+print("now:", "pressed (headphones down)" if b.is_pressed else "released (headphones lifted)")
+b.when_pressed = lambda: print("pressed  (headphones down)")
+b.when_released = lambda: print("released (headphones lifted)")
+pause()
+EOF
+```
+
+`pull_up=True` and the 50ms bounce match what the engine's `switch` backend
+uses, so a switch that prints cleanly here will work in the piece. No output on
+flips means the wiring, the pin number, or the switch itself. Restore with
+`motion-player-toggle --start`.
 
 **Lifting the headphones does nothing, and the log mentions `.lgd-nfy`.**
 lgpio creates its notification FIFOs in the process's working directory, so a

@@ -37,8 +37,9 @@ Notion, which drifts).
 3. Any physical screen. All viewing so far was Pi Connect's virtual desktop.
    TekGroAml 4" (720x720, micro-HDMI, needs 5V USB power) lacked a cable;
    VSDISPLAY 10.1" (1280x800 HDMI) was arriving; two DSI panels (LUCKFOX 8"
-   800x1280 portrait, Hosyond 5" 800x480) need dtoverlay lines — suggested
-   overlays are in COMMANDS.md but are inferences, not vendor-confirmed.
+   800x1280 portrait, Hosyond 5" 800x480) need dtoverlay lines — COMMANDS.md
+   deliberately carries none (the overlay depends on the panel; use the line
+   the vendor specifies).
 4. Audio through the USB adapter + splitter + headphones. `audio_sink` is
    still `auto` on the Pi; pin it (wizard step ③b does this).
 5. Sleep/wake, the LCD panel (never wired; it's a 20x4 I2C at 0x27), the
@@ -47,14 +48,16 @@ Notion, which drifts).
 **The Pi's config lags the new defaults**: `/etc/motion-player/config.ini`
 says `on_rewind_end = hold` explicitly (conffile refreshed during an update),
 so the forward reward needs one edit or a wizard run. `[schedule]` is absent
-(defaults off — fine).
+from the Pi's /etc file (it exists in the shipped defaults with
+`enabled = false`, so scheduling is off either way — fine).
 
 ## The next session, in order
 
 1. `motion-player-update` on the Pi, then `motion-player-setup` — the wizard
    walks every choice (screen shape, sensor, audio sink, reward, LCD, sleep,
-   mode). Enter-through-everything should leave the config byte-identical;
-   that's the smoke test.
+   telemetry, mode). Enter-through-everything should leave the config
+   byte-identical — compare content, not mtime: the wizard rewrites the file
+   and drops a timestamped `.bak-` copy on every run. That's the smoke test.
 2. The switch probe (COMMANDS.md troubleshooting) — until it passes, the
    sensor is decorative.
 3. One real screen + `motion-player-prepare` at its exact resolution + the
