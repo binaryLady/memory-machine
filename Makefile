@@ -35,6 +35,7 @@ lint:
 	bash -n packaging/motion-player-install-deb
 	bash -n packaging/motion-player-display
 	bash -n packaging/motion-player-prepare
+	bash -n packaging/motion-player-prepare-all
 	bash -n packaging/motion-player-setup
 	bash -n scripts/bootstrap_pi.sh
 	bash -n scripts/update.sh

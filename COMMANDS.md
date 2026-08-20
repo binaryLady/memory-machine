@@ -13,7 +13,8 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--fx mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
@@ -230,16 +231,48 @@ motion-player-prepare ~/memory-machine-media/piece.mp4 --size 1280x800 --fx kale
 
 `mirror-h` reflects the left half across a vertical center line, `mirror-v`
 reflects the top half downward, and `kaleidoscope` mirrors the top-left
-quadrant four ways. Each is applied after sizing (and after `--rotate`), so
-the seam lands exactly on the center of the finished frame. The effect joins
-the filename — `piece.kaleidoscope.1280x800.mp4` — so variants live side by
-side and the config names the one that plays. They do not combine with
+quadrant four ways — those three are applied after sizing (and after
+`--rotate`), so the seam lands exactly on the center of the finished frame.
+`double-h` is different: it sets the **whole** frame beside its own
+reflection, losing nothing — a ~1:2 portrait doubled becomes a square — and
+is applied before sizing, since it changes the frame's shape. The effect
+joins the filename — `piece.kaleidoscope.1280x800.mp4` — so variants live
+side by side and the config names the one that plays. None combine with
 `--mode tile`.
 
 Anything else compositional — a different framing, a deliberate arrangement,
 motion that responds to the shape — belongs in an editor. Prepare the file
 however you like and hand the result to `motion-player-reverse`, which builds
 the reversed copy from whatever you give it.
+
+### The whole library in one command
+
+Build every screen's render from both masters at once — nothing is chosen,
+everything becomes available to the setup wizard's picker:
+
+```bash
+motion-player-prepare-all
+```
+
+Profiles cover the show's screens (the VSDISPLAY 1280x800 standing portrait,
+the Hosyond 800x480 the same way, the 720x720 square panel, the 1920x480
+strip) plus the square variants cut from the portrait master (`double-h`
+mirrored pair, `kaleidoscope`). Name profiles to build just those; renders
+already newer than their master are skipped, `--force` rebuilds. The portrait
+master is expected **pre-flipped** — its turn is baked in at export, so the
+rotated rectangles are pure scales.
+
+Audit the shelf without rendering — every clip's true pixel dimensions,
+frame count, and whether its reverse exists (names can lie; this is what the
+engine will actually see):
+
+```bash
+motion-player-prepare-all --report
+```
+
+A `1920x1080` verdict flags a likely editor-canvas export: the piece may be
+letterboxed inside it with the bars baked into the pixels — re-export that
+master at the art's own frame before trusting its renders.
 
 **Preparing the portrait cut needs an explicit `--size`**, because the default
 comes from the screen this Pi is attached to, which is the wrong shape for it:
