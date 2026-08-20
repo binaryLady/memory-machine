@@ -34,6 +34,13 @@ motion-player-prepare — render the piece at the screen's resolution.
              happens once here, not per frame at playback; give --size as
              the panel's native (unrotated) mode, e.g. --size 1280x800
              --rotate cw for a 1280x800 panel standing on its side
+  --fx       mirror-h | mirror-v | kaleidoscope — bake a seamless symmetry
+             into the render. mirror-h reflects the left half across a
+             vertical center line, mirror-v the top half downward, and
+             kaleidoscope mirrors the top-left quadrant four ways. Applied
+             after sizing (and rotation), so the seam is exact and centered.
+             The output name carries the effect: piece.kaleidoscope.WxH.mp4.
+             Does not combine with --mode tile.
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
 USAGE
@@ -41,12 +48,14 @@ USAGE
 
 APPLY=ask
 ROTATE=""
+FX=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --rotate) ROTATE="${2:-}"; shift 2 ;;
+        --fx) FX="${2:-}"; shift 2 ;;
         --apply) APPLY=yes; shift ;;
         --no-apply) APPLY=no; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -59,6 +68,15 @@ case "$ROTATE" in
     ""|cw|ccw) ;;
     *) echo "--rotate must be cw or ccw; got '$ROTATE'" >&2; exit 2 ;;
 esac
+
+case "$FX" in
+    ""|mirror-h|mirror-v|kaleidoscope) ;;
+    *) echo "--fx must be mirror-h, mirror-v or kaleidoscope; got '$FX'" >&2; exit 2 ;;
+esac
+if [ -n "$FX" ] && [ "$MODE" = "tile" ]; then
+    echo "--fx does not combine with --mode tile" >&2
+    exit 2
+fi
 
 SRC="${SRC:-$MEDIA_DIR/piece.mp4}"
 
@@ -150,7 +168,22 @@ if [ -n "$ROTATE" ]; then
     VF="transpose=${T},${VF}"
 fi
 
+# Symmetries after sizing, so the reflection seam is exact and centered on the
+# final frame. These use filter graph labels, hence -filter_complex below.
+case "$FX" in
+    mirror-h)
+        VF="${VF},crop=iw/2:ih:0:0,split[fa][fb];[fb]hflip[fc];[fa][fc]hstack"
+        ;;
+    mirror-v)
+        VF="${VF},crop=iw:ih/2:0:0,split[fa][fb];[fb]vflip[fc];[fa][fc]vstack"
+        ;;
+    kaleidoscope)
+        VF="${VF},crop=iw/2:ih/2:0:0,split=4[ka][kb][kc][kd];[kb]hflip[kb1];[kc]vflip[kc1];[kd]hflip,vflip[kd1];[ka][kb1]hstack[kt];[kc1][kd1]hstack[kk];[kt][kk]vstack"
+        ;;
+esac
+
 STEM="${SRC%.*}"
+[ -n "$FX" ] && STEM="${STEM}.${FX}"
 OUT="${STEM}.${SIZE}.mp4"
 REVERSE="${STEM}.${SIZE}.reverse.mp4"
 
@@ -169,7 +202,7 @@ needs_render() {
 
 if needs_render; then
     echo "Rendering $SRC at ${SIZE} (${MODE})..."
-    if [ "$MODE" = "tile" ] && [ "${COUNT:-1}" -gt 1 ]; then
+    if { [ "$MODE" = "tile" ] && [ "${COUNT:-1}" -gt 1 ]; } || [ -n "$FX" ]; then
         ffmpeg -nostdin -v error -y -i "$SRC" -an -filter_complex "$VF" \
             -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
     else
