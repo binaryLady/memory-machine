@@ -297,3 +297,62 @@ def test_alsa_cards_degrade_to_empty_off_pi() -> None:
     import setup_wizard
 
     assert isinstance(setup_wizard.alsa_cards(), list)
+
+
+def test_the_opening_menu_lists_every_saved_run_by_name() -> None:
+    from setup_wizard import setup_menu
+
+    menu = setup_menu(["gallery-b", "show-opening"])
+
+    assert menu[0].startswith("walk through")
+    assert "gallery-b (saved setup)" in menu
+    assert "show-opening (saved setup)" in menu
+    assert any(c.startswith("save") for c in menu)
+    assert any(c.startswith("duplicate") for c in menu)
+
+
+def test_the_opening_menu_without_setups_still_offers_walk_and_save() -> None:
+    from setup_wizard import setup_menu
+
+    menu = setup_menu([])
+
+    assert menu[0].startswith("walk through")
+    assert any(c.startswith("save") for c in menu)
+    assert not any(c.startswith("duplicate") for c in menu)
+
+
+def test_menu_choices_map_back_to_their_setup_names() -> None:
+    from setup_wizard import menu_choice_setup_name, setup_menu
+
+    menu = setup_menu(["gallery-b"])
+
+    assert menu_choice_setup_name("gallery-b (saved setup)") == "gallery-b"
+    assert menu_choice_setup_name(menu[0]) is None
+    assert menu_choice_setup_name("save the current config as a setup") is None
+    assert menu_choice_setup_name(None) is None
+
+
+def test_picking_a_run_from_the_menu_plays_that_run(tmp_path, monkeypatch) -> None:
+    """The correct choice plays: choose gallery-b, gallery-b's config is live."""
+    import setup_wizard
+    from setup_wizard import list_setups, menu_choice_setup_name, setup_menu
+
+    config = tmp_path / "config.ini"
+    config.write_text(SAMPLE, encoding="utf-8")
+    monkeypatch.setattr(setup_wizard, "CONFIG_PATH", config)
+    monkeypatch.setattr(setup_wizard, "setups_dir", lambda: tmp_path / "setups")
+
+    opening = SAMPLE.replace("scaling             = fit", "scaling             = fill")
+    gallery_b = SAMPLE.replace("sensor_type         = switch", "sensor_type         = keyboard")
+    setup_wizard.save_setup(opening, "show-opening")
+    setup_wizard.save_setup(gallery_b, "gallery-b")
+
+    menu = setup_menu(list_setups(tmp_path / "setups"))
+    choice = next(c for c in menu if c.startswith("gallery-b"))
+    name = menu_choice_setup_name(choice)
+
+    assert name == "gallery-b"
+    assert setup_wizard.load_setup(name) == 0
+    live = config.read_text(encoding="utf-8")
+    assert live == gallery_b, "the chosen run's config, byte for byte"
+    assert "keyboard" in live and "fill" not in live, "not the other setup"

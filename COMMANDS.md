@@ -801,8 +801,10 @@ config, stored in `~/memory-machine-media/setups/<name>.ini`. Because setups
 live in the media folder, they travel with the content: copy the folder to
 another Pi and its setups arrive with it.
 
-The wizard opens with the setups menu — load one, save the current config
-under a name, or duplicate one. Duplication as a workflow: load the setup,
+The wizard opens by asking **which run this Pi plays** — every saved setup
+is its own numbered option, alongside walking the questions, saving the
+current config under a name, or duplicating one. Picking a name loads it
+outright. Duplication as a workflow: load the setup,
 walk the questions to tweak it, and save under the new name at the end (the
 wizard offers exactly that after writing). The same operations exist
 non-interactively:
