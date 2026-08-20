@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 LOGGER = logging.getLogger("motion-player.lcd")
@@ -51,7 +52,6 @@ GLYPHS: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
         (0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00, 0x00),
     ),
 }
-_HEART_SLOT = 0
 
 DEFAULT_TITLE = "memory-machine"
 DEFAULT_LABELS = {
@@ -63,23 +63,126 @@ DEFAULT_LABELS = {
 }
 
 
-def resolve_icon(config: Any) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
-    """The beating pair for this config, or None for a bare column.
+@dataclass(frozen=True)
+class PanelIcon:
+    """A beating icon of one or more 5x8 tiles, row-major.
 
-    A hand-drawn pair (icon_full/icon_small) wins over the named icon; an
-    unknown name falls back to the heart rather than a dead panel.
+    Both frames live in CGRAM at once (full in the low slots, relaxed in the
+    high), so a beat is a handful of cheap character writes, never a glyph
+    redefinition. That is also where the size cap comes from: the chip has 8
+    slots, both frames must fit, so an icon is at most 4 tiles — 2x2 cells,
+    10x16 pixels — which is exactly the text margin the panel layout keeps.
+    """
+
+    full: tuple[tuple[int, ...], ...]
+    small: tuple[tuple[int, ...], ...]
+    cols: int
+    rows: int
+
+
+_ON_PIXELS = set("#*X8@")
+_OFF_PIXELS = set("._ -")
+
+
+def parse_icon_art(text: str) -> PanelIcon:
+    """A pixel-art icon file: two frames of #/. rows separated by ---.
+
+    Width must be 5 or 10 columns, height 8 or 16 rows, both frames the same
+    size. Raises ValueError with a drawable explanation on anything else.
+    """
+    frames: list[list[str]] = [[]]
+    for line in text.splitlines():
+        stripped = line.rstrip()
+        if stripped.strip() == "---":
+            frames.append([])
+            continue
+        if not stripped.strip():
+            continue
+        frames[-1].append(stripped)
+    if len(frames) != 2 or not frames[0] or not frames[1]:
+        raise ValueError("an icon file is two frames — full, a line of ---, then relaxed")
+
+    grids = []
+    width = max(len(row) for frame in frames for row in frame)
+    if width not in (5, 10):
+        raise ValueError(f"icon rows must be 5 or 10 pixels wide; widest is {width}")
+    for frame in frames:
+        if len(frame) not in (8, 16):
+            raise ValueError(f"a frame must be 8 or 16 rows tall; got {len(frame)}")
+        grid = []
+        for row in frame:
+            padded = row.ljust(width)
+            bits = []
+            for char in padded:
+                if char in _ON_PIXELS:
+                    bits.append(1)
+                elif char in _OFF_PIXELS:
+                    bits.append(0)
+                else:
+                    raise ValueError(f"unknown pixel {char!r}; use # for lit and . for dark")
+            grid.append(bits)
+        grids.append(grid)
+    if len(grids[0]) != len(grids[1]):
+        raise ValueError("both frames must be the same height")
+
+    cols = width // 5
+    rows = len(grids[0]) // 8
+
+    def tiles(grid: list[list[int]]) -> tuple[tuple[int, ...], ...]:
+        out = []
+        for tile_row in range(rows):
+            for tile_col in range(cols):
+                tile = []
+                for y in range(8):
+                    bits = grid[tile_row * 8 + y][tile_col * 5:tile_col * 5 + 5]
+                    value = 0
+                    for bit in bits:
+                        value = (value << 1) | bit
+                    tile.append(value)
+                out.append(tuple(tile))
+        return tuple(out)
+
+    return PanelIcon(full=tiles(grids[0]), small=tiles(grids[1]), cols=cols, rows=rows)
+
+
+def text_start(row_index: int, icon: PanelIcon | None) -> int:
+    """First text column of a panel row: the icon owns its cells, text the rest."""
+    if icon is not None and row_index < icon.rows:
+        return icon.cols
+    return 0
+
+
+def resolve_icon(config: Any) -> PanelIcon | None:
+    """The beating icon for this config, or None for a bare column.
+
+    A hand-drawn bitmap pair (icon_full/icon_small) wins over the named icon;
+    a name that is neither built-in nor `none` is looked up as pixel art at
+    <media>/icons/<name>.txt; anything broken falls back to the heart rather
+    than a dead panel.
     """
     full = getattr(config, "icon_full", None)
     small = getattr(config, "icon_small", None)
     if full and small:
-        return tuple(full), tuple(small)
+        return PanelIcon(full=(tuple(full),), small=(tuple(small),), cols=1, rows=1)
     name = str(getattr(config, "icon", "heart")).lower()
     if name == "none":
         return None
-    if name not in GLYPHS:
-        LOGGER.warning("Unknown lcd.icon %r; using the heart", name)
-        name = "heart"
-    return GLYPHS[name]
+    if name in GLYPHS:
+        pair = GLYPHS[name]
+        return PanelIcon(full=(pair[0],), small=(pair[1],), cols=1, rows=1)
+
+    import config as config_module
+
+    art = config_module.MEDIA_DIR / "icons" / f"{name}.txt"
+    if art.exists():
+        try:
+            return parse_icon_art(art.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            LOGGER.warning("Could not use icon art %s (%s); using the heart", art, exc)
+    else:
+        LOGGER.warning("Unknown lcd.icon %r and no %s; using the heart", name, art)
+    pair = GLYPHS["heart"]
+    return PanelIcon(full=(pair[0],), small=(pair[1],), cols=1, rows=1)
 
 
 def panel_labels(config: Any) -> dict[str, str]:
@@ -271,7 +374,12 @@ class Heartbeat:
             lcd = Hd44780I2c(bus, self._config.i2c_address)
             lcd.initialise()
             if self._icon is not None:
-                lcd.define_glyph(_HEART_SLOT, self._icon[0])
+                # Both frames resident at once: full tiles in the low slots,
+                # relaxed in the high, so beating is character writes only.
+                for slot, tile in enumerate(self._icon.full):
+                    lcd.define_glyph(slot, tile)
+                for slot, tile in enumerate(self._icon.small):
+                    lcd.define_glyph(len(self._icon.full) + slot, tile)
         except Exception as exc:  # noqa: BLE001
             LOGGER.error(
                 "Could not open the LCD at bus %s address 0x%02X: %s",
@@ -367,15 +475,18 @@ class Heartbeat:
                         # Only redraw lines that changed; the panel is slow and
                         # a full refresh every second visibly flickers.
                         if index >= len(last_rows) or last_rows[index] != row:
-                            start = 1 if index == 0 else 0
+                            start = text_start(index, self._icon)
                             lcd.write_at(index, start, row[start:])
                     last_rows = rows
 
                 if self._icon is not None:
                     full = beat_is_full(now, bpm)
                     if full != last_full:
-                        lcd.define_glyph(_HEART_SLOT, self._icon[0] if full else self._icon[1])
-                        lcd.write_glyph_at(0, 0, _HEART_SLOT)
+                        base = 0 if full else len(self._icon.full)
+                        for cell in range(len(self._icon.full)):
+                            lcd.write_glyph_at(
+                                cell // self._icon.cols, cell % self._icon.cols, base + cell
+                            )
                         last_full = full
             except Exception as exc:  # noqa: BLE001
                 LOGGER.error("LCD panel write failed; stopping the panel: %s", exc)

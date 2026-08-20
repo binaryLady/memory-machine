@@ -175,11 +175,16 @@ def test_resolve_icon_prefers_the_hand_drawn_pair() -> None:
     drawn = ((1,) * 8, (2,) * 8)
     config = _LcdStub(icon="star", icon_full=drawn[0], icon_small=drawn[1])
 
-    assert lcd.resolve_icon(config) == drawn
+    icon = lcd.resolve_icon(config)
+    assert (icon.full, icon.small) == (((1,) * 8,), ((2,) * 8,))
+    assert (icon.cols, icon.rows) == (1, 1)
 
 
 def test_resolve_icon_falls_back_to_the_heart_on_nonsense() -> None:
-    assert lcd.resolve_icon(_LcdStub(icon="dragon")) == lcd.GLYPHS["heart"]
+    icon = lcd.resolve_icon(_LcdStub(icon="dragon"))
+
+    assert icon.full == (lcd.GLYPHS["heart"][0],)
+    assert icon.small == (lcd.GLYPHS["heart"][1],)
 
 
 def test_resolve_icon_none_means_a_bare_column() -> None:
@@ -192,3 +197,98 @@ def test_panel_labels_fill_gaps_with_the_shipped_words() -> None:
     assert labels["engaged"] == "with you"
     assert labels["idle"] == "at rest"
     assert labels["goodbye"] == "goodbye"
+
+
+ART_1X1 = """\
+.....
+.#.#.
+#####
+#####
+#####
+.###.
+..#..
+.....
+---
+.....
+.....
+.#.#.
+#####
+.###.
+..#..
+.....
+.....
+"""
+
+
+def test_icon_art_single_cell_matches_the_builtin_heart() -> None:
+    icon = lcd.parse_icon_art(ART_1X1)
+
+    assert (icon.cols, icon.rows) == (1, 1)
+    assert icon.full == (lcd.HEART_FULL,)
+    assert icon.small == (lcd.HEART_SMALL,)
+
+
+def test_icon_art_two_by_two_tiles_in_reading_order() -> None:
+    full = "\n".join(["#" * 10] * 16)
+    small = "\n".join(["." * 10] * 16)
+    icon = lcd.parse_icon_art(full + "\n---\n" + small)
+
+    assert (icon.cols, icon.rows) == (2, 2)
+    assert len(icon.full) == 4 and len(icon.small) == 4
+    assert all(tile == (31,) * 8 for tile in icon.full)
+    assert all(tile == (0,) * 8 for tile in icon.small)
+
+
+def test_icon_art_leftmost_pixel_is_the_high_bit() -> None:
+    frame = ["#...."] + ["....#"] * 7
+    icon = lcd.parse_icon_art("\n".join(frame) + "\n---\n" + "\n".join(frame))
+
+    assert icon.full[0][0] == 0b10000
+    assert icon.full[0][1] == 0b00001
+
+
+@pytest.mark.parametrize("bad, why", [
+    ("#####\n" * 8, "missing the --- separator"),
+    ("#" * 7 + "\n" + ("#####\n" * 7) + "---\n" + "#####\n" * 8, "width 7"),
+    ("#####\n" * 5 + "---\n" + "#####\n" * 5, "height 5"),
+    ("##?##\n" + "#####\n" * 7 + "---\n" + "#####\n" * 8, "unknown pixel"),
+    ("#####\n" * 8 + "---\n" + "#####\n" * 16, "mismatched frame heights"),
+])
+def test_icon_art_rejects_undrawable_files(bad: str, why: str) -> None:
+    with pytest.raises(ValueError):
+        lcd.parse_icon_art(bad)
+
+
+def test_text_gives_way_to_the_icon_cells() -> None:
+    big = lcd.parse_icon_art(
+        "\n".join(["#" * 10] * 16) + "\n---\n" + "\n".join(["." * 10] * 16)
+    )
+    single = lcd.resolve_icon(_LcdStub(icon="heart"))
+
+    assert [lcd.text_start(row, big) for row in range(4)] == [2, 2, 0, 0]
+    assert [lcd.text_start(row, single) for row in range(4)] == [1, 0, 0, 0]
+    assert [lcd.text_start(row, None) for row in range(4)] == [0, 0, 0, 0]
+
+
+def test_resolve_icon_reads_pixel_art_from_the_media_folder(tmp_path, monkeypatch) -> None:
+    import config as config_module
+
+    (tmp_path / "icons").mkdir()
+    (tmp_path / "icons" / "bigheart.txt").write_text(ART_1X1, encoding="utf-8")
+    monkeypatch.setattr(config_module, "MEDIA_DIR", tmp_path)
+
+    icon = lcd.resolve_icon(_LcdStub(icon="bigheart"))
+
+    assert icon.full == (lcd.HEART_FULL,)
+
+
+def test_broken_pixel_art_falls_back_to_the_heart(tmp_path, monkeypatch) -> None:
+    import config as config_module
+
+    (tmp_path / "icons").mkdir()
+    (tmp_path / "icons" / "broken.txt").write_text("not art", encoding="utf-8")
+    monkeypatch.setattr(config_module, "MEDIA_DIR", tmp_path)
+
+    icon = lcd.resolve_icon(_LcdStub(icon="broken"))
+
+    assert icon.full == (lcd.GLYPHS["heart"][0],)

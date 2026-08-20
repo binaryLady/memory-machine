@@ -546,6 +546,45 @@ top to bottom (each row is 5 bits), setting **both** shapes of the beat:
 sudo motion-player-setup --set lcd.icon_full=0,10,31,31,31,14,4,0 --set lcd.icon_small=0,0,10,31,14,4,0,0
 ```
 
+### Pixel-art icons, up to 10x16
+
+The panel has no emoji and no free-form graphics — it is a character device —
+but its eight programmable glyph slots compose into something better: icons up
+to **2x2 character cells (10x16 pixels)**, drawn as plain text. Put a file at
+`~/memory-machine-media/icons/<name>.txt` (it travels with the media folder,
+like setups): `#` for a lit pixel, `.` for dark, 5 or 10 pixels wide, 8 or 16
+tall — the full shape, a line of `---`, then the relaxed shape it beats
+against:
+
+```
+.##..#..##.
+####.#.####
+###########
+###########
+.#########.
+.#########.
+..#######..
+..#######..
+...#####...
+...#####...
+....###....
+....###....
+.....#.....
+.....#.....
+...........
+...........
+---
+(same size, drawn smaller)
+```
+
+Then set `icon = <name>` — or just rerun `motion-player-setup`: every file in
+the icons folder appears in the icon menu by name. A big icon occupies the
+panel's left margin (text already clears it), and both beat frames stay
+resident in the chip so the pulse costs a handful of character writes, not a
+redraw. 10x16 is the hard ceiling: both frames must share the chip's eight
+glyph slots. A file that will not parse falls back to the heart with the
+reason in the log, and `motion-player --check-config` reports it precisely.
+
 Panel text is printable ASCII only (the HD44780's character set garbles
 anything else) and up to 18 columns — the loader trims and warns rather than
 letting the glass show noise.
@@ -825,7 +864,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `label_hello` | `hello` | — |
 | `label_sleep` | `goodnight` | — |
 | `label_goodbye` | `goodbye` | — |
-| `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title. |
+| `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title — or the name of a pixel-art file at ~/memory-machine-media/icons/<name>.txt (up to 10x16 pixels; see COMMANDS.md). |
 | `icon_full` | `*(empty)*` | Or draw your own 5x8 icon: 8 comma-separated row values 0-31, top to bottom (each row is 5 bits, e.g. 0,10,31,31,31,14,4,0 is the heart). Set both — the full shape and the relaxed one it beats against. |
 | `icon_small` | `*(empty)*` | — |
 
