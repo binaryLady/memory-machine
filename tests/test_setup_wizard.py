@@ -165,3 +165,52 @@ def test_either_mode_repairs_a_config_that_test_mode_once_windowed() -> None:
 
     for gallery in (True, False):
         assert "fullscreen          = true" in apply_run_mode(stale, gallery=gallery)
+
+
+def test_discover_renders_lists_only_clips_with_a_reverse(tmp_path) -> None:
+    from setup_wizard import discover_renders
+
+    for name in ("piece.mp4", "piece.reverse.mp4",
+                 "piece.kaleidoscope.1280x800.mp4", "piece.kaleidoscope.1280x800.reverse.mp4",
+                 "orphan.mp4"):
+        (tmp_path / name).touch()
+
+    assert discover_renders(tmp_path) == ["piece.kaleidoscope.1280x800.mp4", "piece.mp4"]
+
+
+def test_parse_picks_accepts_one_or_several() -> None:
+    from setup_wizard import parse_picks
+
+    assert parse_picks("2", 3) == [2]
+    assert parse_picks("1,3", 3) == [1, 3]
+    assert parse_picks("3, 1, 3", 3) == [3, 1]
+
+
+@pytest.mark.parametrize("bad", ["0", "4", "x", "1 x", ""])
+def test_parse_picks_rejects_out_of_range_and_garbage(bad: str) -> None:
+    from setup_wizard import parse_picks
+
+    with pytest.raises(ValueError):
+        parse_picks(bad, 3)
+
+
+def test_a_single_render_choice_is_authoritative() -> None:
+    """One pick sets the file pair and clears cuts so nothing second-guesses it."""
+    from setup_wizard import apply_render_choice
+
+    renders = ["piece.kaleidoscope.1280x800.mp4", "piece.mp4"]
+    result = apply_render_choice(SAMPLE, renders, [1])
+
+    assert "video_file = piece.kaleidoscope.1280x800.mp4" in result
+    assert "reverse_file = piece.kaleidoscope.1280x800.reverse.mp4" in result
+    cuts_lines = [line for line in result.splitlines() if line.startswith("cuts")]
+    assert cuts_lines == ["cuts = "], "cuts is cleared, not left pointing elsewhere"
+
+
+def test_several_render_choices_become_the_cut_set() -> None:
+    from setup_wizard import apply_render_choice
+
+    renders = ["piece_portrait.800x1280.mp4", "piece.1280x800.mp4", "piece.mp4"]
+    result = apply_render_choice(SAMPLE, renders, [1, 2])
+
+    assert "cuts = piece_portrait.800x1280.mp4, piece.1280x800.mp4" in result
