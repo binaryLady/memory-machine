@@ -497,8 +497,15 @@ def main() -> int:
                 print("That doesn't look like an address; keeping 0x27.")
                 text = set_ini_value(text, "lcd", "i2c_address", "0x27")
 
-            # The panel's voice — title, state words, and the beating icon.
+            # The panel's voice — layout, title, state words, and the icon.
             if input("Customise the panel's text and icon? [y/N]: ").strip().lower() == "y":
+                style = _ask(
+                    "Panel style?",
+                    ["status (icon, words, health figures)",
+                     "art (icon centered, stars twinkling, no text)"],
+                )
+                if style:
+                    text = set_ini_value(text, "lcd", "layout", style.split(" ")[0])
                 for key, prompt in (
                     ("title", "Title line (up to 18 characters)"),
                     ("label_idle", "Word for at rest"),
@@ -507,8 +514,10 @@ def main() -> int:
                     ("label_sleep", "Word overnight"),
                     ("label_goodbye", "Word at shutdown"),
                 ):
-                    answer = input(f"{prompt} [Enter keeps current]: ").strip()
-                    if answer:
+                    answer = input(f"{prompt} [Enter keeps, - for blank]: ").strip()
+                    if answer == "-":
+                        text = set_ini_value(text, "lcd", key, "")
+                    elif answer:
                         text = set_ini_value(text, "lcd", key, answer)
                 import lcd as lcd_module
 

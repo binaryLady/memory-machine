@@ -546,6 +546,18 @@ top to bottom (each row is 5 bits), setting **both** shapes of the beat:
 sudo motion-player-setup --set lcd.icon_full=0,10,31,31,31,14,4,0 --set lcd.icon_small=0,0,10,31,14,4,0,0
 ```
 
+### Art layout — the panel as a small artwork
+
+`layout = art` drops all text and health figures: the icon sits centered on
+the panel with asterisk stars twinkling around it in counter-phase with the
+beat. This is the panel not as a readout but as a piece — and the right
+choice for a portrait-mounted panel, where ROM text would lie sideways (draw
+the icon pre-rotated in that case, exactly like the video masters). The
+wizard's customise step asks status-or-art; labels can also be individually
+blanked (`-` at the prompt, or an empty value in the config) if you want the
+status layout with fewer words. Sleep still darkens the backlight, and the
+farewell still prints at shutdown.
+
 ### Pixel-art icons, up to 10x16
 
 The panel has no emoji and no free-form graphics — it is a character device —
@@ -858,7 +870,8 @@ description, edit the comments in `config/config.default.ini` and run
 | `idle_bpm` | `60` | — |
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
-| `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. |
+| `layout` | `status` | layout: status \| art. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with asterisk stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. |
+| `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
 | `label_idle` | `at rest` | — |
 | `label_engaged` | `listening` | — |
 | `label_hello` | `hello` | — |

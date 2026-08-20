@@ -292,3 +292,31 @@ def test_broken_pixel_art_falls_back_to_the_heart(tmp_path, monkeypatch) -> None
     icon = lcd.resolve_icon(_LcdStub(icon="broken"))
 
     assert icon.full == (lcd.GLYPHS["heart"][0],)
+
+
+def test_a_deliberately_blank_label_stays_blank() -> None:
+    labels = lcd.panel_labels(_LcdStub(label_idle="", label_engaged="with you"))
+
+    assert labels["idle"] == ""
+    assert labels["engaged"] == "with you"
+    assert labels["sleep"] == "goodnight", "absent still means the shipped word"
+
+
+def test_art_layout_centers_the_big_icon() -> None:
+    big = lcd.parse_icon_art(
+        "\n".join(["#" * 10] * 16) + "\n---\n" + "\n".join(["." * 10] * 16)
+    )
+
+    assert lcd.icon_origin(big) == (1, 9)
+
+
+def test_stars_never_land_on_the_centered_icon() -> None:
+    big = lcd.parse_icon_art(
+        "\n".join(["#" * 10] * 16) + "\n---\n" + "\n".join(["." * 10] * 16)
+    )
+    row0, col0 = lcd.icon_origin(big)
+    cells = {(row0 + r, col0 + c) for r in range(big.rows) for c in range(big.cols)}
+
+    for star in lcd.STARS_A + lcd.STARS_B:
+        assert star not in cells, f"star at {star} would overwrite the icon"
+        assert 0 <= star[0] < lcd.ROWS and 0 <= star[1] < lcd.COLUMNS
