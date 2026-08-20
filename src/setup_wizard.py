@@ -497,6 +497,36 @@ def main() -> int:
                 print("That doesn't look like an address; keeping 0x27.")
                 text = set_ini_value(text, "lcd", "i2c_address", "0x27")
 
+            # The panel's voice — title, state words, and the beating icon.
+            if input("Customise the panel's text and icon? [y/N]: ").strip().lower() == "y":
+                for key, prompt in (
+                    ("title", "Title line (up to 18 characters)"),
+                    ("label_idle", "Word for at rest"),
+                    ("label_engaged", "Word for listening"),
+                    ("label_hello", "Word on waking"),
+                    ("label_sleep", "Word overnight"),
+                    ("label_goodbye", "Word at shutdown"),
+                ):
+                    answer = input(f"{prompt} [Enter keeps current]: ").strip()
+                    if answer:
+                        text = set_ini_value(text, "lcd", key, answer)
+                import lcd as lcd_module
+
+                icons = sorted(lcd_module.GLYPHS) + [
+                    "none (bare column)",
+                    "custom (draw it yourself in the config)",
+                ]
+                icon = _ask("Which icon beats beside the title?", icons)
+                if icon and icon.startswith("custom"):
+                    print(
+                        "\nDraw a 5x8 icon as 8 comma-separated row values 0-31,"
+                        "\ntop to bottom, and set both shapes it beats between:"
+                        "\n  sudo motion-player-setup --set lcd.icon_full=0,10,31,31,31,14,4,0"
+                        " --set lcd.icon_small=0,0,10,31,14,4,0,0"
+                    )
+                elif icon:
+                    text = set_ini_value(text, "lcd", "icon", icon.split(" ")[0])
+
     # 4. Sleep hours.
     wants_sleep = _ask("Sleep the piece overnight?", ["yes", "no"])
     if wants_sleep == "yes":

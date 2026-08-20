@@ -25,11 +25,69 @@ _ROW_OFFSETS = (0x00, 0x40, 0x14, 0x54)
 COLUMNS = 20
 ROWS = 4
 
-# Two 5x8 glyphs. Alternating them is a beat rather than a blink: the heart
-# swells and relaxes instead of appearing and vanishing.
+# Paired 5x8 glyphs. Alternating full and relaxed shapes is a beat rather
+# than a blink: the icon swells and relaxes instead of appearing and
+# vanishing. Each pair keeps that quality in its own vocabulary — the star
+# sparkles, the ring contracts, the eye blinks.
 HEART_FULL = (0x00, 0x0A, 0x1F, 0x1F, 0x1F, 0x0E, 0x04, 0x00)
 HEART_SMALL = (0x00, 0x00, 0x0A, 0x1F, 0x0E, 0x04, 0x00, 0x00)
+
+GLYPHS: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
+    "heart": (HEART_FULL, HEART_SMALL),
+    "star": (
+        (0x04, 0x15, 0x0E, 0x1F, 0x0E, 0x15, 0x04, 0x00),
+        (0x00, 0x00, 0x04, 0x0E, 0x04, 0x00, 0x00, 0x00),
+    ),
+    "ring": (
+        (0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00, 0x00),
+        (0x00, 0x00, 0x04, 0x0E, 0x04, 0x00, 0x00, 0x00),
+    ),
+    "note": (
+        (0x02, 0x03, 0x02, 0x02, 0x0E, 0x1E, 0x0C, 0x00),
+        (0x00, 0x02, 0x02, 0x02, 0x06, 0x06, 0x00, 0x00),
+    ),
+    "eye": (
+        (0x00, 0x0E, 0x11, 0x15, 0x11, 0x0E, 0x00, 0x00),
+        (0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00, 0x00),
+    ),
+}
 _HEART_SLOT = 0
+
+DEFAULT_TITLE = "memory-machine"
+DEFAULT_LABELS = {
+    "idle": "at rest",
+    "engaged": "listening",
+    "hello": "hello",
+    "sleep": "goodnight",
+    "goodbye": "goodbye",
+}
+
+
+def resolve_icon(config: Any) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
+    """The beating pair for this config, or None for a bare column.
+
+    A hand-drawn pair (icon_full/icon_small) wins over the named icon; an
+    unknown name falls back to the heart rather than a dead panel.
+    """
+    full = getattr(config, "icon_full", None)
+    small = getattr(config, "icon_small", None)
+    if full and small:
+        return tuple(full), tuple(small)
+    name = str(getattr(config, "icon", "heart")).lower()
+    if name == "none":
+        return None
+    if name not in GLYPHS:
+        LOGGER.warning("Unknown lcd.icon %r; using the heart", name)
+        name = "heart"
+    return GLYPHS[name]
+
+
+def panel_labels(config: Any) -> dict[str, str]:
+    """The visitor-facing words, from config with the shipped defaults."""
+    return {
+        key: getattr(config, f"label_{key}", None) or default
+        for key, default in DEFAULT_LABELS.items()
+    }
 
 
 def beat_is_full(elapsed_s: float, bpm: float) -> bool:
@@ -49,23 +107,28 @@ def beat_is_full(elapsed_s: float, bpm: float) -> bool:
 HELLO_SECONDS = 5.0
 
 
-def state_label(state: str, seconds_since_wake: float | None = None) -> str:
+def state_label(
+    state: str,
+    seconds_since_wake: float | None = None,
+    labels: dict[str, str] | None = None,
+) -> str:
     """The line-two label: the state of the piece, in a visitor's words."""
+    words = labels or DEFAULT_LABELS
     upper = state.upper()
     if upper == "SLEEP":
-        return "goodnight"
+        return words["sleep"]
     if upper == "ENGAGED":
-        return "listening"
+        return words["engaged"]
     if seconds_since_wake is not None and seconds_since_wake < HELLO_SECONDS:
-        return "hello"
-    return "at rest"
+        return words["hello"]
+    return words["idle"]
 
 
-def farewell_rows() -> list[str]:
+def farewell_rows(title: str = DEFAULT_TITLE, goodbye: str = DEFAULT_LABELS["goodbye"]) -> list[str]:
     """What the panel shows when the piece shuts down."""
     rows = [
-        "  memory-machine",
-        "  goodbye",
+        f"  {title}",
+        f"  {goodbye}",
         "",
         "",
     ]
@@ -79,6 +142,7 @@ def format_rows(
     lifts: int,
     uptime_s: float,
     label: str | None = None,
+    title: str = DEFAULT_TITLE,
 ) -> list[str]:
     """The four lines, each padded to exactly the panel width.
 
@@ -95,7 +159,7 @@ def format_rows(
     listening = label if label is not None else state_label(state)
 
     rows = [
-        "  memory-machine",
+        f"  {title}",
         f"  {listening}",
         f"cpu {cpu_percent:3.0f}%   {temperature_c:4.1f}C",
         f"lifts {lifts:<5} up {uptime}",
@@ -188,6 +252,9 @@ class Heartbeat:
         self._stop = threading.Event()
         self._started_at = time.monotonic()
         self._cpu_previous: tuple[int, int] | None = None
+        self._icon = resolve_icon(self._config)
+        self._labels = panel_labels(self._config)
+        self._title = getattr(self._config, "title", None) or DEFAULT_TITLE
 
     def _open(self) -> Hd44780I2c | None:
         try:
@@ -203,7 +270,8 @@ class Heartbeat:
             bus = SMBus(self._config.i2c_bus)
             lcd = Hd44780I2c(bus, self._config.i2c_address)
             lcd.initialise()
-            lcd.define_glyph(_HEART_SLOT, HEART_FULL)
+            if self._icon is not None:
+                lcd.define_glyph(_HEART_SLOT, self._icon[0])
         except Exception as exc:  # noqa: BLE001
             LOGGER.error(
                 "Could not open the LCD at bus %s address 0x%02X: %s",
@@ -239,7 +307,7 @@ class Heartbeat:
         # must not turn a clean shutdown into an error.
         try:
             self._lcd.set_backlight(True)
-            for index, row in enumerate(farewell_rows()):
+            for index, row in enumerate(farewell_rows(self._title, self._labels["goodbye"])):
                 self._lcd.write_at(index, 0, row)
         except Exception as exc:  # noqa: BLE001
             LOGGER.debug("Could not write the goodbye: %s", exc)
@@ -292,7 +360,8 @@ class Heartbeat:
                         read_temperature_c(),
                         int(snapshot.get("lift_count", 0)),
                         now - self._started_at,
-                        label=state_label(self._state, since_wake),
+                        label=state_label(self._state, since_wake, self._labels),
+                        title=self._title,
                     )
                     for index, row in enumerate(rows):
                         # Only redraw lines that changed; the panel is slow and
@@ -302,11 +371,12 @@ class Heartbeat:
                             lcd.write_at(index, start, row[start:])
                     last_rows = rows
 
-                full = beat_is_full(now, bpm)
-                if full != last_full:
-                    lcd.define_glyph(_HEART_SLOT, HEART_FULL if full else HEART_SMALL)
-                    lcd.write_glyph_at(0, 0, _HEART_SLOT)
-                    last_full = full
+                if self._icon is not None:
+                    full = beat_is_full(now, bpm)
+                    if full != last_full:
+                        lcd.define_glyph(_HEART_SLOT, self._icon[0] if full else self._icon[1])
+                        lcd.write_glyph_at(0, 0, _HEART_SLOT)
+                        last_full = full
             except Exception as exc:  # noqa: BLE001
                 LOGGER.error("LCD panel write failed; stopping the panel: %s", exc)
                 return
