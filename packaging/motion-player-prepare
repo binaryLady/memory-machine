@@ -29,17 +29,24 @@ motion-player-prepare — render the piece at the screen's resolution.
              tile repeat the frame across the screen instead of cropping
   --apply    point the config at the rendered files without asking
   --no-apply render only; print the config lines instead
+  --rotate   cw | ccw — bake a 90-degree turn into the render, for a
+             landscape panel mounted portrait (or the reverse). Rotation
+             happens once here, not per frame at playback; give --size as
+             the panel's native (unrotated) mode, e.g. --size 1280x800
+             --rotate cw for a 1280x800 panel standing on its side
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
 USAGE
 }
 
 APPLY=ask
+ROTATE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --mode) MODE="${2:-}"; shift 2 ;;
+        --rotate) ROTATE="${2:-}"; shift 2 ;;
         --apply) APPLY=yes; shift ;;
         --no-apply) APPLY=no; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -47,6 +54,11 @@ while [ $# -gt 0 ]; do
         *) SRC="$1"; shift ;;
     esac
 done
+
+case "$ROTATE" in
+    ""|cw|ccw) ;;
+    *) echo "--rotate must be cw or ccw; got '$ROTATE'" >&2; exit 2 ;;
+esac
 
 SRC="${SRC:-$MEDIA_DIR/piece.mp4}"
 
@@ -102,6 +114,9 @@ case "$MODE" in
             echo "Could not read the source dimensions; needed to work out the repeat count" >&2
             exit 1
         fi
+        if [ -n "$ROTATE" ]; then
+            TMP_W="$SRC_W"; SRC_W="$SRC_H"; SRC_H="$TMP_W"
+        fi
         SCALED_W=$(( (SRC_W * HEIGHT + SRC_H / 2) / SRC_H ))
         [ "$SCALED_W" -lt 1 ] && SCALED_W=1
         COUNT=$(( (WIDTH + SCALED_W - 1) / SCALED_W ))
@@ -126,6 +141,14 @@ case "$MODE" in
         exit 2
         ;;
 esac
+
+# The turn happens here, once, rather than in a compositor transform at
+# playback: rotation before scaling, so --size stays the panel's native mode.
+if [ -n "$ROTATE" ]; then
+    T=1
+    [ "$ROTATE" = "ccw" ] && T=2
+    VF="transpose=${T},${VF}"
+fi
 
 STEM="${SRC%.*}"
 OUT="${STEM}.${SIZE}.mp4"
