@@ -254,6 +254,30 @@ def alsa_cards() -> list[str]:
         return []
 
 
+_SETUP_SUFFIX = " (saved setup)"
+
+
+def setup_menu(saved: list[str]) -> list[str]:
+    """The wizard's opening menu: every saved run pickable by its own number.
+
+    The run choice is the first thing setup asks, with each option in view —
+    picking a name loads it outright, no submenu.
+    """
+    choices = ["walk through the questions (current config)"]
+    choices += [f"{name}{_SETUP_SUFFIX}" for name in saved]
+    choices.append("save the current config as a setup")
+    if saved:
+        choices.append("duplicate a saved setup")
+    return choices
+
+
+def menu_choice_setup_name(choice: str | None) -> str | None:
+    """The saved-setup name a menu choice refers to, or None for other actions."""
+    if choice and choice.endswith(_SETUP_SUFFIX):
+        return choice.removesuffix(_SETUP_SUFFIX)
+    return None
+
+
 def audio_device_names() -> list[str]:
     """Playback sinks as pygame sees them; empty when it cannot say."""
     try:
@@ -394,28 +418,20 @@ def main() -> int:
     print("memory-machine setup")
     print("====================")
 
-    # 0. Setups: each showing of the piece is a configuration worth keeping.
-    # Duplication is a workflow, not a button: load, walk the questions to
-    # tweak, save under the new name at the end.
+    # 0. Which run? Every saved setup is its own numbered option, so the
+    # first question setup asks is the one that matters. Duplication is a
+    # workflow, not a button: load, walk the questions to tweak, save under
+    # the new name at the end.
     saved = list_setups(setups_dir())
-    choices = ["walk through the questions"]
-    if saved:
-        choices.append("load a saved setup")
-    choices.append("save the current config as a setup")
-    if saved:
-        choices.append("duplicate a saved setup")
-    action = _ask(
-        "Setups" + (f" (saved: {', '.join(saved)})" if saved else ""), choices
-    )
-    if action and action.startswith("load"):
-        pick = _ask("Load which setup?", saved)
-        if pick:
-            code = load_setup(pick)
-            if code != 0:
-                return code
-            if input("\nWalk through the questions to tweak it? [y/N]: ").strip().lower() != "y":
-                return 0
-            text = CONFIG_PATH.read_text(encoding="utf-8")
+    action = _ask("Which run does this Pi play?", setup_menu(saved))
+    picked = menu_choice_setup_name(action)
+    if picked:
+        code = load_setup(picked)
+        if code != 0:
+            return code
+        if input("\nWalk through the questions to tweak it? [y/N]: ").strip().lower() != "y":
+            return 0
+        text = CONFIG_PATH.read_text(encoding="utf-8")
     elif action and action.startswith("save"):
         name = sanitize_setup_name(input("Name for this setup: ").strip())
         if not name:
