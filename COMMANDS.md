@@ -13,7 +13,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-setup` | `--set section.key=value` | guided configuration: screen shape, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution, build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° for a sideways-mounted panel), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
 | `motion-player-media` | — | open the media folder in the file manager |
@@ -312,14 +312,26 @@ cuts = piece_square.mp4, piece_portrait.800x1280.mp4, piece_wide.mp4
 The chooser reads real pixel dimensions from each file, not the name — the
 `800x1280` in the filename is bookkeeping for humans.
 
-**A rotated screen must use the `video_file` flow, not `cuts`.** Cut selection sizes
-the screen from the pinned `display_mode`, which is the physical mode — a
-landscape panel mounted portrait behind a compositor transform still reads as
-landscape, so the chooser would score the portrait cut as the wrong shape.
-`video_file` names the clip outright and nothing second-guesses it. The setup
-wizard's printed prepare hint has the same blind spot: it uses the detected
-physical mode, so on a rotated panel ignore that one line and pass `--size`
-with the rotated (logical) resolution yourself.
+**A panel mounted sideways: bake the turn into the render.** A landscape panel
+standing portrait (or the reverse) wants `--rotate`:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1280x800 --rotate cw
+```
+
+`--size` stays the panel's **native** mode — the rotation happens inside the
+render, once, and the screen itself is never rotated. The engine then plays a
+clip that exactly matches the output: no per-frame cost, nothing to persist
+across reboots, and the cut chooser sees the true shape. `cw` when the panel's
+top edge points left as you face it; if the picture comes up inverted, rerun
+with `ccw` and `--force`.
+
+Rotating the screen in the compositor instead (`wlr-randr --transform 90`) is
+tempting and does rotate the desktop — but the engine renders through XWayland,
+which can keep reporting the unrotated mode, leaving the piece drawing into a
+letterboxed landscape window on a portrait desktop. The baked render avoids
+that whole stack, and matches how everything else here works: pay at render
+time, never at playback.
 
 The screen shape is read from the pinned `display_mode`, or from what the sink
 advertises, before the window is opened. `playback.scaling` still covers
