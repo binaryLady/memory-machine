@@ -163,7 +163,9 @@ def _print_status(status: Status, json_mode: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     import config as config_module
 
-    argv = argv or sys.argv[1:]
+    # `is None`, not falsy: --watch re-enters with an empty list, and an empty
+    # list must stay empty or it re-reads sys.argv and finds --watch again.
+    argv = sys.argv[1:] if argv is None else argv
     json_mode = "--json" in argv
     if "--watch" in argv:
         # A live panel over SSH: reprint every two seconds until Ctrl-C.
