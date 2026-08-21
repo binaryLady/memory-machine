@@ -45,3 +45,24 @@ def test_extras_ride_along_without_their_own_write(monkeypatch, tmp_path) -> Non
 
     target = tmp_path / "motion-player" / "status.json"
     assert not target.exists(), "set_extra alone must not touch the disk"
+
+
+def test_watch_as_the_only_flag_does_not_recurse_into_itself(monkeypatch, tmp_path, capsys) -> None:
+    """--watch re-enters main with an empty argv; an empty argv must not fall
+    back to sys.argv, where --watch is still waiting."""
+    import sys
+    import time
+
+    monkeypatch.setattr(sys, "argv", ["motion-player-status", "--watch"])
+    monkeypatch.setattr(status_module, "_status_file", lambda: tmp_path / "status.json")
+    ticks = {"n": 0}
+
+    def one_tick(_seconds: float) -> None:
+        ticks["n"] += 1
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", one_tick)
+
+    assert status_module.main() == 0
+    assert ticks["n"] == 1
+    assert "State:" in capsys.readouterr().out
