@@ -306,7 +306,8 @@ grep Playback ~/.local/state/motion-player/motion-player.log | tail -5
 Each line reports achieved frame rate against target, mean and worst frame time,
 and how many frames missed their deadline. The same figures appear in
 `motion-player-status` under `playback`, alongside CPU, temperature, memory,
-load, disk free, and the firmware throttle flags — and the compact subset rides
+load, disk free, the firmware throttle flags, and the Active Cooler's fan step
+(`fan_level`, 0–4; absent without a cooler) — and the compact subset rides
 every telemetry heartbeat, so a remote monitor sees them too. Late frames in any number mean the Pi
 is not keeping up: prepare the media at the output size first, and if it still
 cannot, the source resolution is too high for software decode.
@@ -612,7 +613,8 @@ panel.
 Every interaction is also written locally, one JSON line per event, one file
 per day, at `~/.local/state/motion-player/journal/YYYY-MM-DD.jsonl` — lift,
 replace, reward (a visitor stayed through the whole rewind), sleep, wake,
-startup, shutdown. Telemetry can lose the network; this cannot, and it never
+startup, shutdown, and once an hour `heat` — temperature, throttle flags, and
+the Active Cooler's fan step, repeated on shutdown. Telemetry can lose the network; this cannot, and it never
 interrupts the show: a failed write is a logged warning. A day of heavy
 visiting is a few tens of kilobytes — the raw material for a visualization
 of a month of presence:

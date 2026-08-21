@@ -36,7 +36,7 @@ def _health_fields(extra: dict[str, Any]) -> dict[str, Any]:
     flattened from the last completed timing window.
     """
     fields: dict[str, Any] = {}
-    for key in ("cpu_percent", "temperature_c", "throttled", "asleep", "version"):
+    for key in ("cpu_percent", "temperature_c", "throttled", "fan_level", "asleep", "version"):
         if key in extra:
             fields[key] = extra[key]
     playback = extra.get("playback")
