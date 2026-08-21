@@ -1086,6 +1086,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title — or the name of a pixel-art file at ~/memory-machine-media/icons/<name>.txt (up to 10x16 pixels; see COMMANDS.md). |
 | `icon_full` | `*(empty)*` | Or draw your own 5x8 icon: 8 comma-separated row values 0-31, top to bottom (each row is 5 bits, e.g. 0,10,31,31,31,14,4,0 is the heart). Set both — the full shape and the relaxed one it beats against. |
 | `icon_small` | `*(empty)*` | — |
+| `backlight` | `on` | backlight: on \| off. Off leaves the characters showing by ambient light alone — the quiet look the panel already wears overnight, all day. |
 
 ### `[lcd2]`
 

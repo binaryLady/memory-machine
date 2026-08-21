@@ -525,6 +525,7 @@ class Heartbeat:
         self._layout = str(getattr(self._config, "layout", "status")).lower()
         self._pages = instruction_pages(self._config)
         self._page_seconds = float(getattr(self._config, "page_seconds", 6.0))
+        self._backlight = bool(getattr(self._config, "backlight", True))
 
     def _open(self) -> Hd44780I2c | None:
         try:
@@ -540,6 +541,7 @@ class Heartbeat:
             bus = SMBus(self._config.i2c_bus)
             lcd = Hd44780I2c(bus, self._config.i2c_address)
             lcd.initialise()
+            lcd.set_backlight(self._backlight)
             if self._icon is not None:
                 # Both frames resident at once: full tiles in the low slots,
                 # relaxed in the high, so beating is character writes only.
@@ -585,7 +587,7 @@ class Heartbeat:
         # Best effort only: the piece is already stopping, so a failed goodbye
         # must not turn a clean shutdown into an error.
         try:
-            self._lcd.set_backlight(True)
+            self._lcd.set_backlight(self._backlight)
             for index, row in enumerate(farewell_rows(self._title, self._labels["goodbye"])):
                 self._lcd.write_at(index, 0, row)
         except Exception as exc:  # noqa: BLE001
@@ -617,7 +619,7 @@ class Heartbeat:
                 elif previous_state == "SLEEP":
                     woke_at = now
                     try:
-                        lcd.set_backlight(True)
+                        lcd.set_backlight(self._backlight)
                     except Exception as exc:  # noqa: BLE001
                         LOGGER.debug("Backlight on failed: %s", exc)
                 previous_state = current

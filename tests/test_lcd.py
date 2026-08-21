@@ -493,3 +493,38 @@ def test_show_stars_avoid_the_title_and_the_centered_icon() -> None:
         assert star not in icon_cells, f"star {star} collides with the icon"
         assert star not in title_cells, f"star {star} collides with the title"
         assert 0 <= star[0] < lcd.ROWS and 0 <= star[1] < lcd.COLUMNS
+
+
+def _open_panel(monkeypatch, backlight: bool):
+    import sys
+    import types
+    from types import SimpleNamespace
+
+    class FakeBus:
+        def __init__(self, bus: int) -> None:
+            self.writes: list[int] = []
+
+        def write_byte(self, address: int, value: int) -> None:
+            self.writes.append(value)
+
+    smbus2 = types.ModuleType("smbus2")
+    smbus2.SMBus = FakeBus
+    monkeypatch.setitem(sys.modules, "smbus2", smbus2)
+    config = SimpleNamespace(enabled=True, i2c_bus=1, i2c_address=0x27, icon="none",
+                             layout="status", backlight=backlight, page_seconds=6.0)
+    panel = lcd.Heartbeat(config, status=None)
+    opened = panel._open()
+    assert opened is not None
+    return opened._bus
+
+
+def test_a_panel_configured_dark_opens_with_its_backlight_off(monkeypatch) -> None:
+    bus = _open_panel(monkeypatch, backlight=False)
+
+    assert bus.writes[-1] & 0x08 == 0, "the backlight bit must be clear after open"
+
+
+def test_a_panel_opens_lit_by_default(monkeypatch) -> None:
+    bus = _open_panel(monkeypatch, backlight=True)
+
+    assert bus.writes[-1] & 0x08 == 0x08
