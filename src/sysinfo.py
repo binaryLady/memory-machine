@@ -43,6 +43,19 @@ def read_temperature_c() -> float:
         return 0.0
 
 
+def read_fan_level(path: str = "/sys/class/thermal/cooling_device0/cur_state") -> int | None:
+    """The firmware-driven fan step of the official Active Cooler, 0 (off) to 4.
+
+    None when no fan is fitted or off-Pi. The firmware owns the curve; this is
+    read-only so the status file can show the cooler is pulling its weight.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return int(handle.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
 def read_mem_available_mb(path: str = "/proc/meminfo") -> float:
     try:
         with open(path, encoding="utf-8") as handle:

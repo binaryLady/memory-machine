@@ -66,7 +66,9 @@ from the Pi's /etc file (it exists in the shipped defaults with
 4. Audio by ear: lift, fade on replace, and the turn into forward with sound
    uninterrupted (PR #44/#45 seam).
 5. A soak: `system.exit_after_s=14400`, four hours, then read `throttled` in
-   motion-player-status — heat is the show's only real tax.
+   motion-player-status — heat is the show's only real tax. The show Pi wears
+   the official Active Cooler (stick-on sinks removed; firmware drives the fan,
+   the code only reports `fan_level`). `0x0` after the soak is the pass mark.
 
 ## Open questions / deferred
 

@@ -60,3 +60,13 @@ def test_version_comes_from_build_info_and_degrades_to_unknown(tmp_path: Path) -
 def test_disk_free_is_zero_for_a_nonexistent_path(tmp_path: Path) -> None:
     assert sysinfo.disk_free_mb(tmp_path / "absent") == 0.0
     assert sysinfo.disk_free_mb(tmp_path) > 0.0
+
+
+def test_fan_level_is_none_without_a_cooler(tmp_path) -> None:
+    assert sysinfo.read_fan_level(str(tmp_path / "missing")) is None
+
+
+def test_fan_level_reads_the_firmware_step(tmp_path) -> None:
+    state = tmp_path / "cur_state"
+    state.write_text("3\n", encoding="utf-8")
+    assert sysinfo.read_fan_level(str(state)) == 3

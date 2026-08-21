@@ -163,6 +163,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
     status.set_extra("version", sysinfo.read_version())
     loop_started = time.monotonic()
     next_housekeeping = 0.0
+    next_heat_entry = 0.0
     cpu_previous: tuple[int, int] | None = None
 
     last_panel_state = ""
@@ -237,6 +238,14 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
             status.set_extra("mem_available_mb", round(sysinfo.read_mem_available_mb(), 1))
             status.set_extra("load_1m", sysinfo.read_load_1m())
             status.set_extra("throttled", sysinfo.read_throttled())
+            fan_level = sysinfo.read_fan_level()
+            status.set_extra("fan_level", fan_level)
+            # Once an hour the heat goes in the captain's log too, so a month
+            # of journal files tells whether the cooler held through the show.
+            if now >= next_heat_entry:
+                next_heat_entry = now + 3600.0
+                journal.record("heat", temperature_c=round(sysinfo.read_temperature_c(), 1),
+                               throttled=sysinfo.read_throttled(), fan_level=fan_level)
             status.set_extra("disk_free_mb", round(sysinfo.disk_free_mb(Path.home()), 1))
             status.set_extra("asleep", scheduler.asleep)
             timing = video.last_timing
@@ -337,7 +346,8 @@ def run(argv: list[str] | None = None) -> int:
         # A clean stop is news too: remote monitoring cannot otherwise tell a
         # deliberate quit from the start of a crash loop.
         telemetry.event("shutdown", reason="requested", exit_code=result)
-        journal.record("shutdown")
+        journal.record("shutdown", temperature_c=round(sysinfo.read_temperature_c(), 1),
+                       throttled=sysinfo.read_throttled(), fan_level=sysinfo.read_fan_level())
         return result
     except Exception as exc:  # noqa: BLE001
         LOGGER.critical("Unhandled exception: %s\n%s", exc, traceback.format_exc())
