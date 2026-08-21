@@ -56,9 +56,19 @@ class FakeTelemetry:
         self.events.append(event_type)
 
 
+class FakeJournal:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    def record(self, event: str, **fields: Any) -> None:
+        self.events.append(event)
+
+
 def apply(transition: str | None, state: FakeState) -> tuple[FakeVideo, FakeAudio, FakeTelemetry]:
     video, audio, telemetry = FakeVideo(), FakeAudio(), FakeTelemetry()
-    motion_test._apply_schedule_transition(transition, state, video, audio, telemetry, FakeCfg())
+    motion_test._apply_schedule_transition(
+        transition, state, video, audio, telemetry, FakeCfg(), FakeJournal()
+    )
     return video, audio, telemetry
 
 

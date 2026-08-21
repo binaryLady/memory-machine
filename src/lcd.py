@@ -202,18 +202,44 @@ def mood_word(mood: str, labels: dict[str, str]) -> str:
     return labels[MOOD_WORDS[mood]]
 
 
+# While she is interacting the panel gives itself over: title up, one big
+# heart beating at the center, the word beneath, health yielding for the
+# moment. Star cells here clear the title row (columns 1-18), the icon
+# (rows 1-2, columns 9-10), and a centered word on row 3 (columns 1-18).
+INTER_STARS = (
+    ((0, 0), (1, 16), (2, 4), (3, 19)),
+    ((0, 19), (1, 3), (2, 15), (3, 0)),
+)
+ALL_INTER_STARS = tuple(sorted(INTER_STARS[0] + INTER_STARS[1]))
+
+
+def show_view(mood: str) -> str:
+    """Which face the show layout wears: the background texture or her focus."""
+    return "interacting" if mood in ("lively", "radiant") else "background"
+
+
+def interacting_rows(title: str, word: str) -> list[str]:
+    """The interacting view's text: title up, word beneath the big heart."""
+    blank = " " * COLUMNS
+    return [center_line(title), blank, blank, center_line(word)]
+
+
 def show_stars(mood: str, full: bool) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
     """(shown, hidden) star cells for a mood at a beat phase.
 
-    Calm and lively alternate their pairs; radiant flashes the whole sky with
-    the beat; hello holds every star lit; dark shows none.
+    Background moods twinkle the corners; lively alternates the interacting
+    scatter; radiant flashes the whole interacting sky with the beat; hello
+    holds every corner star lit; dark shows none.
     """
     if mood == "dark":
         return (), ()
     if mood == "hello":
         return ALL_SHOW_STARS, ()
     if mood == "radiant":
-        return (ALL_SHOW_STARS, ()) if full else ((), ALL_SHOW_STARS)
+        return (ALL_INTER_STARS, ()) if full else ((), ALL_INTER_STARS)
+    if mood == "lively":
+        first, second = INTER_STARS
+        return (first, second) if full else (second, first)
     first, second = SHOW_STARS[mood]
     return (first, second) if full else (second, first)
 
@@ -522,6 +548,7 @@ class Heartbeat:
         lcd = self._lcd
         last_full: bool | None = None
         last_mood: str | None = None
+        last_view: str | None = None
         last_rows: list[str] = []
         next_stats = 0.0
 
@@ -557,15 +584,35 @@ class Heartbeat:
 
             try:
                 if self._layout == "show":
-                    # The panel narrates: title always up, the mood's word
-                    # beside a beating heart, health beneath, stars in the
-                    # corners the text never reaches.
+                    # The panel narrates in two faces. Background: title,
+                    # word beside a tiny beating heart, health beneath, stars
+                    # in the corners. Interacting: she takes the panel — one
+                    # big heart beating at the center, the word beneath it.
                     since = None if woke_at is None else now - woke_at
                     mood = show_mood(current, since)
                     word = mood_word(mood, self._labels)
+                    view = show_view(mood)
                     full = beat_is_full(now, bpm)
+
+                    if view != last_view:
+                        # Reprogram CGRAM per face — on the rare state flip,
+                        # never per beat. The background's tiny heart is the
+                        # classic pair; the interacting face loads the big
+                        # icon, both frames resident.
+                        if view == "background":
+                            lcd.define_glyph(0, HEART_FULL)
+                            lcd.define_glyph(1, HEART_SMALL)
+                        elif self._icon is not None:
+                            for slot, tile in enumerate(self._icon.full):
+                                lcd.define_glyph(slot, tile)
+                            for slot, tile in enumerate(self._icon.small):
+                                lcd.define_glyph(len(self._icon.full) + slot, tile)
+                        last_rows = []
+                        last_view = view
+                        last_mood = None
+
                     rows_due = now >= next_stats
-                    if rows_due:
+                    if view == "background" and rows_due:
                         next_stats = now + 1.0
                         cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)
                         snapshot = self._status.snapshot()
@@ -582,19 +629,33 @@ class Heartbeat:
                             if index >= len(last_rows) or last_rows[index] != row:
                                 lcd.write_at(index, 0, row)
                         last_rows = rows
+                    elif view == "interacting" and (mood != last_mood or not last_rows):
+                        rows = interacting_rows(self._title, word)
+                        for index, row in enumerate(rows):
+                            if index >= len(last_rows) or last_rows[index] != row:
+                                lcd.write_at(index, 0, row)
+                        last_rows = rows
+
                     if rows_due or full != last_full or mood != last_mood:
                         if mood != last_mood:
-                            # A new personality clears the whole sky first, so
-                            # no star of the old mood lingers.
-                            for row, col in ALL_SHOW_STARS:
+                            # A new personality clears the whole sky first,
+                            # so no star of the old mood lingers.
+                            for row, col in ALL_SHOW_STARS + ALL_INTER_STARS:
                                 lcd.write_at(row, col, " ")
-                        if self._icon is not None and len(last_rows) > 1:
-                            # The heart sits inline, two cells before the word
-                            # (a multi-cell icon lends its first tile here).
-                            pad = len(last_rows[1]) - len(last_rows[1].lstrip())
-                            lcd.write_glyph_at(
-                                1, max(0, pad - 2), 0 if full else len(self._icon.full)
-                            )
+                        if self._icon is not None:
+                            if view == "background" and len(last_rows) > 1:
+                                # Tiny heart inline, two cells before the word.
+                                pad = len(last_rows[1]) - len(last_rows[1].lstrip())
+                                lcd.write_glyph_at(1, max(0, pad - 2), 0 if full else 1)
+                            elif view == "interacting":
+                                origin_row, origin_col = icon_origin(self._icon)
+                                base = 0 if full else len(self._icon.full)
+                                for cell in range(len(self._icon.full)):
+                                    lcd.write_glyph_at(
+                                        origin_row + cell // self._icon.cols,
+                                        origin_col + cell % self._icon.cols,
+                                        base + cell,
+                                    )
                         shown, hidden = show_stars(mood, full)
                         for row, col in hidden:
                             lcd.write_at(row, col, " ")

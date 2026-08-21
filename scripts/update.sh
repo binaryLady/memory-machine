@@ -68,7 +68,10 @@ install_deb() {
             sudo -v || { log "ERROR: could not obtain sudo to install the package"; return 1; }
         fi
         set +e
-        sudo apt-get install --reinstall -y --allow-downgrades "$deb" 2>&1 | tee -a "$LOG"
+        # --force-confold: keep the operator's config without asking; an
+        # unattended run must never hang on dpkg's conffile prompt.
+        sudo apt-get install --reinstall -y --allow-downgrades \
+            -o Dpkg::Options::=--force-confold "$deb" 2>&1 | tee -a "$LOG"
         status=${PIPESTATUS[0]}
         set -e
         if [ "$status" != "0" ]; then

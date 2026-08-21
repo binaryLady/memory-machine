@@ -565,10 +565,36 @@ the panel with asterisk stars twinkling around it in counter-phase with the
 beat. This is the panel not as a readout but as a piece — and the right
 choice for a portrait-mounted panel, where ROM text would lie sideways (draw
 the icon pre-rotated in that case, exactly like the video masters). The
-wizard's customise step asks status-or-art; labels can also be individually
+wizard's customise step asks the panel style; labels can also be individually
 blanked (`-` at the prompt, or an empty value in the config) if you want the
 status layout with fewer words. Sleep still darkens the backlight, and the
 farewell still prints at shutdown.
+
+### Show layout — the panel as her narrator
+
+`layout = show` wears two faces. At rest it is the background texture: the
+title always up, the idle word beside a tiny beating heart, system health
+beneath, stars twinkling in the corners. The moment she is interacting it
+gives itself over — one big heart (your pixel-art icon, every tile) beating
+at the center, the state's word beneath it, stars scattered wide. At the
+flip, when a visitor has stayed through the whole rewind, the word changes
+(`label_reward`, default `I see you`) and the whole sky flashes with the
+beat. Glyph memory is reprogrammed only when the face changes, never per
+beat, so the animation stays a handful of character writes.
+
+### The captain's log
+
+Every interaction is also written locally, one JSON line per event, one file
+per day, at `~/.local/state/motion-player/journal/YYYY-MM-DD.jsonl` — lift,
+replace, reward (a visitor stayed through the whole rewind), sleep, wake,
+startup, shutdown. Telemetry can lose the network; this cannot, and it never
+interrupts the show: a failed write is a logged warning. A day of heavy
+visiting is a few tens of kilobytes — the raw material for a visualization
+of a month of presence:
+
+```bash
+ls ~/.local/state/motion-player/journal/
+```
 
 ### Pixel-art icons, up to 10x16
 
