@@ -80,6 +80,7 @@ class LcdConfig:
     icon_full: tuple[int, ...] | None
     icon_small: tuple[int, ...] | None
     layout: str
+    backlight: bool
     page_seconds: float
     pages: tuple[tuple[str, ...], ...]
 
@@ -230,6 +231,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "icon_full": "",
         "icon_small": "",
         "layout": "status",
+        "backlight": True,
         "page_seconds": 6.0,
         "page_1": "",
         "page_2": "",
@@ -449,6 +451,7 @@ def _parse_lcd_section(raw: dict[str, Any], section: str) -> LcdConfig:
         icon_full=_parse_glyph(raw.get("icon_full")),
         icon_small=_parse_glyph(raw.get("icon_small")),
         layout=str(raw.get("layout", defaults["layout"])).strip().lower(),
+        backlight=_parse_bool(raw.get("backlight"), defaults["backlight"]),
         page_seconds=_parse_float(raw.get("page_seconds"), defaults["page_seconds"], 1.0, 600.0),
         pages=_parse_pages(raw),
     )

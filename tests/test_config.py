@@ -292,3 +292,11 @@ def test_the_packaged_ini_and_the_defaults_dict_agree() -> None:
     assert packaged.sensor.engaged_when == config.DEFAULTS["sensor"]["engaged_when"]
     assert packaged.audio.audio_mode == config.DEFAULTS["audio"]["audio_mode"]
     assert packaged.audio.audio_sink == config.DEFAULTS["audio"]["audio_sink"]
+
+
+def test_a_panel_may_run_with_its_backlight_off(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[lcd]\nenabled = true\n[lcd2]\nbacklight = off\n")
+    cfg = config.load(path)
+
+    assert cfg.lcd.backlight is True, "lit unless asked otherwise"
+    assert cfg.lcd2.backlight is False
