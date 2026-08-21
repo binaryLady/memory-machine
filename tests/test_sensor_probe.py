@@ -195,3 +195,29 @@ def test_settings_missing_reads_the_wanted_set_it_is_given() -> None:
     assert settings_missing(GAMEPAD_SETTINGS, pad_config) == [
         ("sensor.sensor_type", "gamepad"),
     ]
+
+
+def test_fit_config_names_the_sensor_it_is_fitting(monkeypatch, capsys) -> None:
+    """The gamepad branch must not speak of the touch pad, and vice versa."""
+    import sensor_probe
+
+    monkeypatch.setattr(sensor_probe, "_run", lambda cmd: True)
+    monkeypatch.setattr(sensor_probe.sys.stdin, "isatty", lambda: False)
+
+    sensor_probe._fit_config([], "switch", "gamepad", "gamepad")
+    out = capsys.readouterr().out
+    assert "not the gamepad" in out
+    assert "touch pad" not in out
+
+    sensor_probe._fit_config([], "switch", "capacitive", "touch pad")
+    out = capsys.readouterr().out
+    assert "not the touch pad" in out
+
+
+def test_fit_config_leaves_the_matching_sensor_unquestioned(monkeypatch, capsys) -> None:
+    import sensor_probe
+
+    monkeypatch.setattr(sensor_probe, "_run", lambda cmd: True)
+
+    assert sensor_probe._fit_config([], "gamepad", "gamepad", "gamepad") == 0
+    assert "not the" not in capsys.readouterr().out
