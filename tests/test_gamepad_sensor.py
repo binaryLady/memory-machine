@@ -26,7 +26,8 @@ _INIT = 0x80
 # What the shipped config says this pad reports, arrows left as axes.
 NUMBERS = {"a": 1, "b": 0, "select": 2, "start": 3,
            "up": None, "down": None, "left": None, "right": None}
-JOBS = {"hold": ("start", "select"), "kaleidoscope": ("a", "b")}
+JOBS = {"hold": ("start", "select"), "kaleidoscope": ("a", "b"),
+        "audio_next": ("right", "down"), "audio_prev": ("left", "up")}
 
 
 def js_event(kind: int, number: int, value: int, timestamp: int = 0) -> bytes:
@@ -84,7 +85,7 @@ def test_an_unknown_axis_moves_nothing() -> None:
 def test_jobs_are_looked_up_by_control_name() -> None:
     assert jobs_for(JOBS, "start") == ["hold"]
     assert jobs_for(JOBS, "a") == ["kaleidoscope"]
-    assert jobs_for(JOBS, "left") == []
+    assert jobs_for(JOBS, "left") == ["audio_prev"]
 
 
 def test_any_means_any_button_but_never_an_arrow() -> None:
@@ -119,7 +120,7 @@ def sensor_config(**overrides: object) -> SimpleNamespace:
 
 
 def gamepad_config(**overrides: object) -> SimpleNamespace:
-    base = {"numbers": NUMBERS, "jobs": JOBS, "audio": {}}
+    base = {"numbers": NUMBERS, "jobs": JOBS}
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -157,18 +158,22 @@ def test_the_kaleidoscope_fires_once_on_the_press() -> None:
     assert events.empty(), "letting go is not a second toggle"
 
 
-def test_an_arrow_with_a_sound_behind_it_names_that_sound() -> None:
-    sensor = GamepadSensor(sensor_config(), gamepad_config(audio={"left": "/media/one.wav"}))
+def test_the_arrows_turn_the_sound_deck_either_way() -> None:
+    sensor = GamepadSensor(sensor_config(), gamepad_config())
     events: queue.Queue = queue.Queue()
     sensor._events = events
 
     sensor._handle(("axis", 0, -32767))
+    sensor._handle(("axis", 0, 0))
+    sensor._handle(("axis", 1, 32767))
 
-    assert events.get_nowait()[0] == "audio_left"
+    assert events.get_nowait()[0] == "audio_prev"
+    assert events.get_nowait()[0] == "audio_next"
+    assert events.empty(), "letting an arrow go is not another turn"
 
 
-def test_an_arrow_with_no_sound_behind_it_says_nothing() -> None:
-    sensor = GamepadSensor(sensor_config(), gamepad_config())
+def test_an_arrow_given_no_job_says_nothing() -> None:
+    sensor = GamepadSensor(sensor_config(), gamepad_config(jobs={"hold": ("any",)}))
     events: queue.Queue = queue.Queue()
     sensor._events = events
 

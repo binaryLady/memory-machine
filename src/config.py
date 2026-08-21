@@ -99,13 +99,12 @@ class GamepadConfig:
 
     numbers maps a control name to the number this pad reports for it; the four
     arrows are axes on most pads and stay None unless a number is given. jobs
-    maps a job — "hold", "kaleidoscope" — to the control names that drive it,
-    and audio maps a control name to the sound it chooses.
+    maps a job — "hold", "kaleidoscope", "audio_next", "audio_prev" — to the
+    control names that drive it.
     """
 
     numbers: dict[str, int | None]
     jobs: dict[str, tuple[str, ...]]
-    audio: dict[str, Path]
 
 
 @dataclass(frozen=True)
@@ -267,10 +266,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "right": "",
         "hold": "start+select",
         "kaleidoscope": "a+b",
-        "audio_up": "",
-        "audio_down": "",
-        "audio_left": "",
-        "audio_right": "",
+        "audio_next": "right+down",
+        "audio_prev": "left+up",
     },
     "schedule": {
         "enabled": False,
@@ -329,7 +326,7 @@ _VALID_GAMEPAD_DIRECTIONS = {"left", "right", "up", "down"}
 # The face buttons by name, plus "any" for a pad that only ever holds.
 _GAMEPAD_BUTTONS = ("a", "b", "select", "start")
 _GAMEPAD_CONTROLS = {*_GAMEPAD_BUTTONS, "any"}
-_GAMEPAD_JOBS = ("hold", "kaleidoscope")
+_GAMEPAD_JOBS = ("hold", "kaleidoscope", "audio_next", "audio_prev")
 _VALID_SENSOR_COMBINE = {"any", "all"}
 
 
@@ -617,11 +614,6 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
                 job: _control_list(gamepad_raw.get(job, DEFAULTS["gamepad"][job]))
                 for job in _GAMEPAD_JOBS
             },
-            audio={
-                direction: _resolve_path(str(gamepad_raw.get(f"audio_{direction}")).strip())
-                for direction in sorted(_VALID_GAMEPAD_DIRECTIONS)
-                if str(gamepad_raw.get(f"audio_{direction}", "")).strip()
-            },
         ),
         system=SystemConfig(
             mode=str(system_raw.get("mode", DEFAULTS["system"]["mode"])),
@@ -682,9 +674,6 @@ def validate(config: Config) -> list[str]:
                 f"Use {sorted(_GAMEPAD_CONTROLS | _VALID_GAMEPAD_DIRECTIONS)}, "
                 f"or a raw button as b<number>."
             )
-    for direction, path in config.gamepad.audio.items():
-        if not path.exists():
-            problems.append(f"gamepad.audio_{direction} not found: {path}")
 
     types = [t.strip() for t in config.sensor.sensor_type.split("+")]
     unknown = [t for t in types if t not in _VALID_SENSOR_TYPES]

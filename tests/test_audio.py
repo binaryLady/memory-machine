@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 import types
 from dataclasses import dataclass
 from typing import Any
@@ -221,3 +222,64 @@ def test_a_missing_sound_leaves_the_one_that_works(
 
     assert engine.switch_to(tmp_path / "never-rendered.wav") is False
     assert engine._audio_path == playing
+
+
+def test_the_library_is_every_sound_in_the_folder_in_name_order(tmp_path) -> None:
+    import audio as audio_module
+
+    for name in ("piece.wav", "b-side.mp3", "notes.txt", "a-side.WAV"):
+        (tmp_path / name).touch()
+    (tmp_path / "renders").mkdir()
+
+    assert [p.name for p in audio_module.sound_library(tmp_path)] == [
+        "a-side.WAV", "b-side.mp3", "piece.wav",
+    ]
+
+
+def test_the_deck_wraps_at_both_ends() -> None:
+    import audio as audio_module
+
+    deck = [Path("/m/a.wav"), Path("/m/b.wav"), Path("/m/c.wav")]
+
+    assert audio_module.neighbour_sound(deck, deck[2], 1) == deck[0]
+    assert audio_module.neighbour_sound(deck, deck[0], -1) == deck[2]
+    assert audio_module.neighbour_sound(deck, deck[0], 1) == deck[1]
+
+
+def test_a_sound_outside_the_deck_starts_it_from_the_top() -> None:
+    import audio as audio_module
+
+    deck = [Path("/m/a.wav"), Path("/m/b.wav")]
+
+    assert audio_module.neighbour_sound(deck, Path("/elsewhere/x.wav"), 1) == deck[0]
+    assert audio_module.neighbour_sound(deck, Path("/elsewhere/x.wav"), -1) == deck[1]
+
+
+def test_one_sound_or_none_has_nowhere_to_go() -> None:
+    import audio as audio_module
+
+    only = Path("/m/a.wav")
+    assert audio_module.neighbour_sound([only], only, 1) is None
+    assert audio_module.neighbour_sound([], only, 1) is None
+
+
+def test_cycling_switches_to_the_next_sound_beside_the_current_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, tmp_path)
+    (tmp_path / "second.wav").touch()
+    engine.play_looping()
+
+    assert engine.cycle(1) is True
+    assert engine.audio_path == tmp_path / "second.wav"
+    assert engine.cycle(1) is True, "wraps back round"
+    assert engine.audio_path == tmp_path / "piece.wav"
+
+
+def test_cycling_with_a_single_sound_changes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, tmp_path)
+
+    assert engine.cycle(1) is False
+    assert engine.audio_path == tmp_path / "piece.wav"

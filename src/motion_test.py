@@ -112,12 +112,11 @@ def _handle_control(event: str, video: VideoEngine, audio: AudioEngine,
         status.set_extra("kaleidoscope", showing)
         journal.record("kaleidoscope", showing=showing)
         return True
-    if event.startswith("audio_"):
-        path = cfg.gamepad.audio.get(event[len("audio_"):])
-        if path is not None and audio.switch_to(path):
+    if event in ("audio_next", "audio_prev"):
+        if audio.cycle(1 if event == "audio_next" else -1):
             video.set_audio_duration(audio.duration_s)
-            status.set_extra("audio_file", path.name)
-            journal.record("audio_chosen", file=path.name)
+            status.set_extra("audio_file", audio.audio_path.name)
+            journal.record("audio_chosen", file=audio.audio_path.name)
         return True
     return False
 
