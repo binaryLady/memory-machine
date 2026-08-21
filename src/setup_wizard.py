@@ -557,7 +557,8 @@ def main() -> int:
                 style = _ask(
                     "Panel style?",
                     ["status (icon, words, health figures)",
-                     "art (icon centered, stars twinkling, no text)"],
+                     "art (icon centered, stars twinkling, no text)",
+                     "show (title always up, icon + stars, state personalities)"],
                 )
                 if style:
                     text = set_ini_value(text, "lcd", "layout", style.split(" ")[0])
@@ -565,6 +566,7 @@ def main() -> int:
                     ("title", "Title line (up to 18 characters)"),
                     ("label_idle", "Word for at rest"),
                     ("label_engaged", "Word for listening"),
+                    ("label_reward", "Word for the turn (the reward)"),
                     ("label_hello", "Word on waking"),
                     ("label_sleep", "Word overnight"),
                     ("label_goodbye", "Word at shutdown"),

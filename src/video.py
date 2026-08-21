@@ -435,6 +435,10 @@ class VideoEngine:
         return self._frame_count / (self._reverse_step * self._fps)
 
     @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
     def display_mode(self) -> str:
         return self._display_mode
 

@@ -57,6 +57,7 @@ DEFAULT_TITLE = "memory-machine"
 DEFAULT_LABELS = {
     "idle": "at rest",
     "engaged": "listening",
+    "reward": "I see you",
     "hello": "hello",
     "sleep": "goodnight",
     "goodbye": "goodbye",
@@ -150,6 +151,72 @@ def parse_icon_art(text: str) -> PanelIcon:
 STARS_A = ((0, 3), (0, 16), (1, 6), (2, 13), (3, 4), (3, 15))
 STARS_B = ((0, 8), (0, 12), (1, 14), (2, 5), (3, 9), (3, 18))
 
+# Show layout: the panel narrates the piece — title always up, the state's
+# word beside a beating heart, health beneath, stars twinkling in the corners
+# the text never reaches. A centered 18-column title uses row 0 columns 1-18,
+# the word row keeps its ends clear, the cpu row ends by column 15, and the
+# lifts row can run the full width — so the stars live at the free corners.
+SHOW_STARS = {
+    "calm": (
+        ((0, 0), (2, 19)),
+        ((0, 19), (2, 17)),
+    ),
+    "lively": (
+        ((0, 0), (2, 17)),
+        ((0, 19), (2, 19)),
+    ),
+}
+ALL_SHOW_STARS = ((0, 0), (0, 19), (2, 17), (2, 19))
+
+
+def show_mood(state: str, seconds_since_wake: float | None = None) -> str:
+    """The show layout's personality for a state.
+
+    Listening is lively, the turn into forward is radiant, rest is calm, the
+    wake window greets with every star lit, and sleep goes dark (the
+    backlight is already off).
+    """
+    upper = state.upper()
+    if upper == "SLEEP":
+        return "dark"
+    if upper == "REWARD":
+        return "radiant"
+    if upper == "ENGAGED":
+        return "lively"
+    if seconds_since_wake is not None and seconds_since_wake < HELLO_SECONDS:
+        return "hello"
+    return "calm"
+
+
+MOOD_WORDS = {
+    "calm": "idle",
+    "lively": "engaged",
+    "radiant": "reward",
+    "hello": "hello",
+    "dark": "sleep",
+}
+
+
+def mood_word(mood: str, labels: dict[str, str]) -> str:
+    """The configured word a mood speaks."""
+    return labels[MOOD_WORDS[mood]]
+
+
+def show_stars(mood: str, full: bool) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """(shown, hidden) star cells for a mood at a beat phase.
+
+    Calm and lively alternate their pairs; radiant flashes the whole sky with
+    the beat; hello holds every star lit; dark shows none.
+    """
+    if mood == "dark":
+        return (), ()
+    if mood == "hello":
+        return ALL_SHOW_STARS, ()
+    if mood == "radiant":
+        return (ALL_SHOW_STARS, ()) if full else ((), ALL_SHOW_STARS)
+    first, second = SHOW_STARS[mood]
+    return (first, second) if full else (second, first)
+
 
 def icon_origin(icon: PanelIcon) -> tuple[int, int]:
     """Top-left cell that centers the icon on the 20x4 panel."""
@@ -236,6 +303,8 @@ def state_label(
     upper = state.upper()
     if upper == "SLEEP":
         return words["sleep"]
+    if upper == "REWARD":
+        return words["reward"]
     if upper == "ENGAGED":
         return words["engaged"]
     if seconds_since_wake is not None and seconds_since_wake < HELLO_SECONDS:
@@ -243,11 +312,21 @@ def state_label(
     return words["idle"]
 
 
+def center_line(text: str, start: int = 2) -> str:
+    """Text centered on the panel row, never intruding on the icon's columns.
+
+    The left margin (`start`) is where the icon lives; short text centers past
+    it naturally, long text is pinned to it rather than colliding.
+    """
+    pad = max(start, (COLUMNS - len(text)) // 2)
+    return (" " * pad + text)[:COLUMNS].ljust(COLUMNS)
+
+
 def farewell_rows(title: str = DEFAULT_TITLE, goodbye: str = DEFAULT_LABELS["goodbye"]) -> list[str]:
     """What the panel shows when the piece shuts down."""
     rows = [
-        f"  {title}",
-        f"  {goodbye}",
+        center_line(title),
+        center_line(goodbye),
         "",
         "",
     ]
@@ -278,8 +357,8 @@ def format_rows(
     listening = label if label is not None else state_label(state)
 
     rows = [
-        f"  {title}",
-        f"  {listening}",
+        center_line(title),
+        center_line(listening),
         f"cpu {cpu_percent:3.0f}%   {temperature_c:4.1f}C",
         f"lifts {lifts:<5} up {uptime}",
     ]
@@ -442,6 +521,7 @@ class Heartbeat:
         assert self._lcd is not None
         lcd = self._lcd
         last_full: bool | None = None
+        last_mood: str | None = None
         last_rows: list[str] = []
         next_stats = 0.0
 
@@ -469,12 +549,62 @@ class Heartbeat:
 
             if current == "SLEEP":
                 bpm = self._config.sleep_bpm
-            elif current == "ENGAGED":
+            elif current in ("ENGAGED", "REWARD"):
+                # The reward is still a visitor present: the heart stays quick.
                 bpm = self._config.engaged_bpm
             else:
                 bpm = self._config.idle_bpm
 
             try:
+                if self._layout == "show":
+                    # The panel narrates: title always up, the mood's word
+                    # beside a beating heart, health beneath, stars in the
+                    # corners the text never reaches.
+                    since = None if woke_at is None else now - woke_at
+                    mood = show_mood(current, since)
+                    word = mood_word(mood, self._labels)
+                    full = beat_is_full(now, bpm)
+                    rows_due = now >= next_stats
+                    if rows_due:
+                        next_stats = now + 1.0
+                        cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)
+                        snapshot = self._status.snapshot()
+                        rows = format_rows(
+                            self._state,
+                            cpu,
+                            read_temperature_c(),
+                            int(snapshot.get("lift_count", 0)),
+                            now - self._started_at,
+                            label=word,
+                            title=self._title,
+                        )
+                        for index, row in enumerate(rows):
+                            if index >= len(last_rows) or last_rows[index] != row:
+                                lcd.write_at(index, 0, row)
+                        last_rows = rows
+                    if rows_due or full != last_full or mood != last_mood:
+                        if mood != last_mood:
+                            # A new personality clears the whole sky first, so
+                            # no star of the old mood lingers.
+                            for row, col in ALL_SHOW_STARS:
+                                lcd.write_at(row, col, " ")
+                        if self._icon is not None and len(last_rows) > 1:
+                            # The heart sits inline, two cells before the word
+                            # (a multi-cell icon lends its first tile here).
+                            pad = len(last_rows[1]) - len(last_rows[1].lstrip())
+                            lcd.write_glyph_at(
+                                1, max(0, pad - 2), 0 if full else len(self._icon.full)
+                            )
+                        shown, hidden = show_stars(mood, full)
+                        for row, col in hidden:
+                            lcd.write_at(row, col, " ")
+                        for row, col in shown:
+                            lcd.write_at(row, col, "*")
+                        last_full = full
+                        last_mood = mood
+                    self._stop.wait(0.05)
+                    continue
+
                 if self._layout != "art" and now >= next_stats:
                     next_stats = now + 1.0
                     cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)

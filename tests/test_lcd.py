@@ -132,11 +132,15 @@ def test_the_backlight_bit_toggles() -> None:
     assert bus.writes[-1] & 0x08 == 0x08, "backlight bit must be set"
 
 
-def test_custom_title_and_labels_reach_the_panel() -> None:
+def test_custom_title_and_labels_reach_the_panel_centered() -> None:
     rows = lcd.format_rows("IDLE", 5.0, 40.0, 3, 60, label="dreaming", title="her memory")
 
-    assert rows[0].startswith("  her memory")
-    assert rows[1].startswith("  dreaming")
+    assert rows[0].strip() == "her memory"
+    assert rows[1].strip() == "dreaming"
+    for row, text in ((rows[0], "her memory"), (rows[1], "dreaming")):
+        left = len(row) - len(row.lstrip())
+        right = len(row) - len(row.rstrip())
+        assert abs(left - right) <= 1, f"{text!r} is not centered: {row!r}"
     assert all(len(row) == lcd.COLUMNS for row in rows)
 
 
@@ -153,9 +157,18 @@ def test_state_label_speaks_the_configured_words() -> None:
 def test_farewell_uses_the_configured_voice() -> None:
     rows = lcd.farewell_rows("her memory", "farewell")
 
-    assert rows[0].startswith("  her memory")
-    assert rows[1].startswith("  farewell")
+    assert rows[0].strip() == "her memory"
+    assert rows[1].strip() == "farewell"
     assert all(len(row) == lcd.COLUMNS for row in rows)
+
+
+def test_centering_respects_the_icon_margin() -> None:
+    long_line = lcd.center_line("a" * 18)
+    short_line = lcd.center_line("hi")
+
+    assert long_line.startswith("  a"), "long text pins to the icon margin, no collision"
+    assert len(long_line) == lcd.COLUMNS
+    assert short_line.index("hi") == (lcd.COLUMNS - 2) // 2
 
 
 def test_every_builtin_glyph_pair_fits_the_hardware() -> None:
@@ -319,4 +332,68 @@ def test_stars_never_land_on_the_centered_icon() -> None:
 
     for star in lcd.STARS_A + lcd.STARS_B:
         assert star not in cells, f"star at {star} would overwrite the icon"
+        assert 0 <= star[0] < lcd.ROWS and 0 <= star[1] < lcd.COLUMNS
+
+
+def test_show_moods_follow_the_piece() -> None:
+    assert lcd.show_mood("ENGAGED") == "lively"
+    assert lcd.show_mood("IDLE") == "calm"
+    assert lcd.show_mood("IDLE", seconds_since_wake=2.0) == "hello"
+    assert lcd.show_mood("ENGAGED", seconds_since_wake=2.0) == "lively"
+    assert lcd.show_mood("SLEEP") == "dark"
+
+
+def test_each_mood_has_its_own_constellation() -> None:
+    """Liveliness rides the tempo (engaged bpm), the pattern marks the mood."""
+    calm = lcd.show_stars("calm", full=True)
+    lively = lcd.show_stars("lively", full=True)
+
+    assert calm != lively
+
+
+def test_the_reward_flashes_the_whole_sky_with_the_beat() -> None:
+    shown_full, hidden_full = lcd.show_stars("radiant", full=True)
+    shown_relax, hidden_relax = lcd.show_stars("radiant", full=False)
+
+    assert set(shown_full) == set(lcd.ALL_SHOW_STARS) and hidden_full == ()
+    assert shown_relax == () and set(hidden_relax) == set(lcd.ALL_SHOW_STARS)
+
+
+def test_the_reward_speaks_its_own_word() -> None:
+    assert lcd.show_mood("REWARD") == "radiant"
+    assert lcd.mood_word("radiant", lcd.DEFAULT_LABELS) == "I see you"
+    assert lcd.state_label("REWARD") == "I see you"
+    words = dict(lcd.DEFAULT_LABELS, reward="See me too")
+    assert lcd.mood_word("radiant", words) == "See me too"
+
+
+def test_hello_lights_every_star_and_hides_none() -> None:
+    shown, hidden = lcd.show_stars("hello", full=True)
+
+    assert set(shown) == set(lcd.ALL_SHOW_STARS)
+    assert hidden == ()
+
+
+def test_dark_shows_nothing() -> None:
+    assert lcd.show_stars("dark", full=True) == ((), ())
+
+
+def test_show_stars_swap_with_the_beat() -> None:
+    shown_full, hidden_full = lcd.show_stars("calm", full=True)
+    shown_relax, hidden_relax = lcd.show_stars("calm", full=False)
+
+    assert shown_full == hidden_relax and hidden_full == shown_relax
+
+
+def test_show_stars_avoid_the_title_and_the_centered_icon() -> None:
+    big = lcd.parse_icon_art(
+        "\n".join(["#" * 10] * 16) + "\n---\n" + "\n".join(["." * 10] * 16)
+    )
+    row0, col0 = lcd.icon_origin(big)
+    icon_cells = {(row0 + r, col0 + c) for r in range(big.rows) for c in range(big.cols)}
+    title_cells = {(0, c) for c in range(1, 19)}  # a centered 18-column title
+
+    for star in lcd.ALL_SHOW_STARS:
+        assert star not in icon_cells, f"star {star} collides with the icon"
+        assert star not in title_cells, f"star {star} collides with the title"
         assert 0 <= star[0] < lcd.ROWS and 0 <= star[1] < lcd.COLUMNS
