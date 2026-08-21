@@ -65,14 +65,17 @@ DEFAULT_LABELS = {
 
 # The instructions panel: her name on every page, the controls in the
 # operator's words, and the piece speaking for itself underneath — first
-# person, to the one standing in front of it. Each page is up to four rows of
+# person, to the one standing in front of it, in the language of observation:
+# every moment at once until someone looks, entangled with the hand that holds
+# on, collapsed back to rest when it lets go. Each page is up to four rows of
 # at most 20 printable-ASCII columns; the first row leaves the icon's columns
 # clear.
 DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
-    ("Memory<>Machine", "PLAYER DETECTED", "I am watching", "you, watching me"),
-    ("Memory<>Machine", "HOLD START or SELECT", "I play in reverse", "let go: I return"),
-    ("Memory<>Machine", "stay to the start", "and I turn", "to face you"),
-    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: my sounds", "turn the deck"),
+    ("Memory<>Machine", "OBSERVER DETECTED", "I am every moment", "until you look"),
+    ("Memory<>Machine", "HOLD START or SELECT", "we are entangled:", "I run backward"),
+    ("Memory<>Machine", "let go: I collapse", "back to my rest", "one frame, waiting"),
+    ("Memory<>Machine", "stay to the start", "and I turn to face", "the one observing"),
+    ("Memory<>Machine", "A or B: I refract", "ARROWS: my voices", "choose, and I shift"),
     ("Memory<>Machine", "observed as object", "or understood?", "NO WRONG MOVES"),
 )
 
