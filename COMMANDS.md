@@ -495,7 +495,7 @@ edit to `/etc/motion-player/config.ini`.
 ## Sleeping overnight
 
 The piece can rest outside gallery hours: screens black, audio silent, sensor
-events ignored, and the LCD dark with a "goodnight". At the wake time it says
+events ignored, and the LCD dark with an "unobserved". At the wake time it says
 "hello" for a few seconds and the loop resumes exactly as configured — including
 the sensorless loop-forward fallback.
 
@@ -577,7 +577,7 @@ sleep_bpm   = 0
 
 The heart beats at `idle_bpm` at rest and `engaged_bpm` while someone holds on;
 overnight it slows to `sleep_bpm` — 0 holds it still — while the backlight goes
-dark and the panel says goodnight. It says hello for a few seconds at wake, and
+dark and the panel says unobserved. It says hello for a few seconds at wake, and
 goodbye when the piece shuts down.
 
 ### The panel's voice
@@ -1118,12 +1118,12 @@ description, edit the comments in `config/config.default.ini` and run
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
 | `layout` | `status` | layout: status \| art \| show \| instructions. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. show keeps the title always up over the centered beating icon, with stars whose energy follows the piece's state — calm at rest, lively while someone holds on, every star lit for the wake-up hello. instructions turns the panel into the visitor's rotating instruction card — see [lcd2], the second panel it was made for. |
-| `title` | `Memory<>Machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
-| `label_idle` | `at rest` | — |
-| `label_engaged` | `holding on` | — |
+| `title` | `Memory<>Machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. The shipped words come from the piece's premise: the portrait is coherent until it is observed, forgets while it is, and is unobserved overnight. |
+| `label_idle` | `coherent` | — |
+| `label_engaged` | `forgetting` | — |
 | `label_reward` | `I see you` | Spoken when a visitor stays through the whole rewind and the piece turns forward — the reward for staying present. |
 | `label_hello` | `hello` | — |
-| `label_sleep` | `goodnight` | — |
+| `label_sleep` | `unobserved` | — |
 | `label_goodbye` | `goodbye` | — |
 | `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title — or the name of a pixel-art file at ~/memory-machine-media/icons/<name>.txt (up to 10x16 pixels; see COMMANDS.md). |
 | `icon_full` | `*(empty)*` | Or draw your own 5x8 icon: 8 comma-separated row values 0-31, top to bottom (each row is 5 bits, e.g. 0,10,31,31,31,14,4,0 is the heart). Set both — the full shape and the relaxed one it beats against. |
@@ -1187,7 +1187,7 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `enabled` | `false` | Sleep the piece overnight: screens black, audio silent, sensor ignored, LCD dark with a "goodnight". Times are HH:MM local; a window may span midnight (23:00 to 08:00). start == end disables the window. |
+| `enabled` | `false` | Sleep the piece overnight: screens black, audio silent, sensor ignored, LCD dark with an "unobserved". Times are HH:MM local; a window may span midnight (23:00 to 08:00). start == end disables the window. |
 | `sleep_start` | `00:00` | — |
 | `sleep_end` | `08:00` | — |
 

@@ -29,8 +29,8 @@ def test_state_reads_as_the_piece_rather_than_the_machine() -> None:
     at_rest = lcd.format_rows("IDLE", 0.0, 0.0, 0, 0)[1]
     holding = lcd.format_rows("ENGAGED", 0.0, 0.0, 0, 0)[1]
 
-    assert "at rest" in at_rest
-    assert "holding on" in holding
+    assert "coherent" in at_rest
+    assert "forgetting" in holding
 
 
 def test_the_counter_speaks_the_pad_era() -> None:
@@ -91,20 +91,20 @@ def test_the_two_heart_glyphs_are_valid_5x8_bitmaps() -> None:
     ), "the full heart must be the larger of the two"
 
 
-def test_the_panel_says_goodnight_while_the_piece_sleeps() -> None:
-    assert lcd.state_label("SLEEP") == "goodnight"
+def test_the_panel_says_unobserved_while_the_piece_sleeps() -> None:
+    assert lcd.state_label("SLEEP") == "unobserved"
     rows = lcd.format_rows("SLEEP", 0.0, 0.0, 0, 0, label=lcd.state_label("SLEEP"))
-    assert "goodnight" in rows[1]
+    assert "unobserved" in rows[1]
 
 
 def test_the_panel_says_hello_for_a_few_seconds_after_waking() -> None:
     assert lcd.state_label("IDLE", seconds_since_wake=2.0) == "hello"
-    assert lcd.state_label("IDLE", seconds_since_wake=6.0) == "at rest"
+    assert lcd.state_label("IDLE", seconds_since_wake=6.0) == "coherent"
 
 
 def test_holding_beats_hello_when_someone_holds_at_opening() -> None:
-    """A visitor at 8:01 should see 'holding on', not a leftover greeting."""
-    assert lcd.state_label("ENGAGED", seconds_since_wake=2.0) == "holding on"
+    """A visitor at 8:01 should see 'forgetting', not a leftover greeting."""
+    assert lcd.state_label("ENGAGED", seconds_since_wake=2.0) == "forgetting"
 
 
 def test_the_heart_is_still_when_sleep_bpm_is_zero() -> None:
@@ -213,7 +213,7 @@ def test_panel_labels_fill_gaps_with_the_shipped_words() -> None:
     labels = lcd.panel_labels(_LcdStub(label_engaged="with you"))
 
     assert labels["engaged"] == "with you"
-    assert labels["idle"] == "at rest"
+    assert labels["idle"] == "coherent"
     assert labels["goodbye"] == "goodbye"
 
 
@@ -317,7 +317,7 @@ def test_a_deliberately_blank_label_stays_blank() -> None:
 
     assert labels["idle"] == ""
     assert labels["engaged"] == "with you"
-    assert labels["sleep"] == "goodnight", "absent still means the shipped word"
+    assert labels["sleep"] == "unobserved", "absent still means the shipped word"
 
 
 def test_art_layout_centers_the_big_icon() -> None:
