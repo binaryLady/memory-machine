@@ -55,11 +55,11 @@ GLYPHS: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
 
 DEFAULT_TITLE = "Memory<>Machine"
 DEFAULT_LABELS = {
-    "idle": "at rest",
-    "engaged": "holding on",
+    "idle": "coherent",
+    "engaged": "forgetting",
     "reward": "I see you",
     "hello": "hello",
-    "sleep": "goodnight",
+    "sleep": "unobserved",
     "goodbye": "goodbye",
 }
 
