@@ -91,6 +91,8 @@ class FakeMedia:
     reverse_file: Any
     audio_file: Any = "piece.wav"
     cuts: tuple = ()
+    kaleidoscope_file: Any = None
+    kaleidoscope_cuts: tuple = ()
 
 
 @dataclass
@@ -513,3 +515,53 @@ def test_the_last_timing_window_survives_the_counter_reset(
     assert timing["target_fps"] == 30.0
     assert timing["frames"] >= 1
     assert engine._timing_frames == 0, "the counters were reset after capture"
+
+
+def kaleidoscope_engine(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Any:
+    install_cv2_stub(monkeypatch)
+    import video
+
+    names = ("piece.mp4", "piece.reverse.mp4",
+             "piece.kaleidoscope.mp4", "piece.kaleidoscope.reverse.mp4")
+    for name in names:
+        (tmp_path / name).touch()
+    media = FakeMedia(tmp_path / "piece.mp4", tmp_path / "piece.reverse.mp4",
+                      kaleidoscope_file=tmp_path / "piece.kaleidoscope.mp4")
+    return video.VideoEngine(FakeConfig(FakePlayback(), media))
+
+
+def test_the_kaleidoscope_button_switches_the_picture_and_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = kaleidoscope_engine(monkeypatch, tmp_path)
+
+    assert engine.toggle_kaleidoscope() is True
+    assert engine._video_path.name == "piece.kaleidoscope.mp4"
+    assert engine._reverse_path.name == "piece.kaleidoscope.reverse.mp4"
+
+    assert engine.toggle_kaleidoscope() is False
+    assert engine._video_path.name == "piece.mp4"
+
+
+def test_switching_render_keeps_the_visitor_where_they_were(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # The twin is the same footage at the same length, so a rewind three
+    # quarters of the way back carries on from there, not from the end.
+    engine = kaleidoscope_engine(monkeypatch, tmp_path)
+    engine.set_mode("REVERSE")
+    engine._current_index = 40.0
+
+    engine.toggle_kaleidoscope()
+
+    assert engine.mode == "REVERSE"
+    assert engine._current_index == 40.0
+
+
+def test_without_a_twin_the_button_does_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, str(tmp_path / "piece.mp4"))
+
+    assert engine.toggle_kaleidoscope() is False
+    assert engine.showing_kaleidoscope is False

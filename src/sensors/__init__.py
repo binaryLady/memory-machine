@@ -14,7 +14,7 @@ from .null import NullSensor
 LOGGER = logging.getLogger("motion-player.sensor")
 
 
-def _make_single(sensor_type: str, config: Any) -> Sensor:
+def _make_single(sensor_type: str, config: Any, gamepad: Any = None) -> Sensor:
     if sensor_type in {"switch", "reed", "beam", "reflective", "hall", "pir", "gpio_raw"}:
         return DigitalSensor(sensor_type, config)
     if sensor_type == "distance":
@@ -25,6 +25,10 @@ def _make_single(sensor_type: str, config: Any) -> Sensor:
         from .capacitive import CapacitiveSensor  # type: ignore[misc]
 
         return CapacitiveSensor(config)
+    if sensor_type == "gamepad":
+        from .gamepad import GamepadSensor  # type: ignore[misc]
+
+        return GamepadSensor(config, gamepad)
     if sensor_type == "mmwave":
         from .mmwave import MmwaveSensor  # type: ignore[misc]
 
@@ -141,8 +145,12 @@ class FusedSensor(Sensor):
         return any(states)
 
 
-def make_sensor(config: Any) -> Sensor:
-    """Create the configured sensor backend, falling back to keyboard on failure."""
+def make_sensor(config: Any, gamepad: Any = None) -> Sensor:
+    """Create the configured sensor backend, falling back to keyboard on failure.
+
+    gamepad carries what each control on a pad does; without it a pad still
+    holds on any button, which is all a fused member needs to be useful.
+    """
     raw_types = [t.strip() for t in config.sensor_type.split("+")]
 
     # Special-case the backends that need no hardware, so they always work.
@@ -154,7 +162,7 @@ def make_sensor(config: Any) -> Sensor:
     members: list[Sensor] = []
     for sensor_type in raw_types:
         try:
-            sensor = _make_single(sensor_type, config)
+            sensor = _make_single(sensor_type, config, gamepad)
             members.append(sensor)
             LOGGER.info("Sensor backend initialised: %s", sensor.name)
         except Exception as exc:  # noqa: BLE001

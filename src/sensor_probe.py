@@ -104,6 +104,12 @@ def format_report(sensor_cfg: dict[str, Any], audio_cfg: dict[str, Any],
     if sensor_type == "capacitive":
         out.append(f"  i2c_address   {sensor_cfg.get('i2c_address') or '0x5a'}"
                    f"  channel {sensor_cfg.get('touch_channel', 0)}")
+    elif sensor_type == "gamepad":
+        out.append(f"  device        {sensor_cfg.get('gamepad_device', 'auto')}")
+        for job, controls in (sensor_cfg.get("gamepad_jobs") or {}).items():
+            out.append(f"  {job:<13} {'+'.join(controls) or 'nothing'}")
+        for direction, path in (sensor_cfg.get("gamepad_audio") or {}).items():
+            out.append(f"  audio {direction:<7} {Path(path).name}")
     else:
         out.append(f"  gpio_pin      {sensor_cfg.get('gpio_pin', '?')}"
                    f"  pull_up {sensor_cfg.get('pull_up', '?')}")
@@ -156,6 +162,22 @@ def _i2c_report(bus: int, address: int) -> str:
             f"I2C is enabled (raspi-config)")
 
 
+def _gamepad_report(configured: str) -> str:
+    """Which pad is plugged in, or why none can be read."""
+    from sensors.gamepad import device_name, find_device
+
+    path = find_device(configured)
+    if path is None:
+        hint = ""
+        if Path("/proc/bus/input/devices").exists() and not Path("/dev/input").glob("js*"):
+            hint = " (if the pad is plugged in, the joystick driver may be missing: modprobe joydev)"
+        return f"no gamepad at {configured} — plug one into a USB port{hint}"
+    if not os.access(path, os.R_OK):
+        return (f"{device_name(path)} at {path}, but it is not readable — "
+                f"sudo usermod -aG input $USER, then log out and back in")
+    return f"{device_name(path)} at {path}"
+
+
 def _gpio_report(pin: int, pull_up: bool) -> str:
     try:
         from gpiozero import Button  # type: ignore[import-untyped]
@@ -179,6 +201,8 @@ def describe_hardware(sensor_cfg: dict[str, Any]) -> str:
     if sensor_type == "capacitive":
         return _i2c_report(int(sensor_cfg.get("i2c_bus", 1)),
                            int(sensor_cfg.get("i2c_address") or 0x5A))
+    if sensor_type == "gamepad":
+        return _gamepad_report(str(sensor_cfg.get("gamepad_device", "auto")))
     return _gpio_report(int(sensor_cfg.get("gpio_pin", 4)),
                         bool(sensor_cfg.get("pull_up", True)))
 
@@ -198,6 +222,10 @@ def report() -> int:
         "pull_up": cfg.sensor.pull_up,
         "i2c_address": cfg.sensor.i2c_address,
         "touch_channel": cfg.sensor.touch_channel,
+        "gamepad_device": cfg.sensor.gamepad_device,
+        "gamepad_jobs": cfg.gamepad.jobs,
+        "gamepad_audio": cfg.gamepad.audio,
+        "gamepad_numbers": cfg.gamepad.numbers,
         "i2c_bus": 1,
     }
     audio_cfg = {"audio_mode": cfg.audio.audio_mode, "audio_sink": cfg.audio.audio_sink}
@@ -261,6 +289,48 @@ def _service(action: str) -> None:
     subprocess.run(["motion-player-toggle", f"--{action}"], check=False)
 
 
+def _watch_gamepad(configured: str, gamepad: Any) -> None:
+    """Watch the pad live, naming every control and saying what it does.
+
+    Every press is printed, named where the config has named it and as a bare
+    number where it has not — which is how a pad that disagrees with the
+    shipped numbers gets corrected from something somebody actually saw.
+    """
+    import select
+
+    from sensors.gamepad import controls_from_event, device_name, find_device, jobs_for, parse_js_event
+
+    path = find_device(configured)
+    if path is None:
+        print(f"no gamepad at {configured}; plug one in and try again")
+        return
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    print(f"watching {device_name(path)} at {path} — press and hold; Ctrl+C to stop")
+    held: dict[str, float] = {}
+    try:
+        while True:
+            ready, _, _ = select.select([descriptor], [], [], 0.5)
+            if not ready:
+                continue
+            event = parse_js_event(os.read(descriptor, 8))
+            if event is None:
+                continue
+            for control, pressed in controls_from_event(gamepad.numbers, *event):
+                jobs = jobs_for(gamepad.jobs, control)
+                if control in gamepad.audio:
+                    jobs = [*jobs, "sound"]
+                does = ", ".join(jobs) or "nothing"
+                if pressed:
+                    held[control] = time.monotonic()
+                    print(f"contact  {control:<6} ({does})", flush=True)
+                elif control in held:
+                    seconds = time.monotonic() - held.pop(control)
+                    note = _hold_note(seconds) if "hold" in jobs else ""
+                    print(f"release  {control:<6} held {seconds:.2f}s{note}", flush=True)
+    finally:
+        os.close(descriptor)
+
+
 def probe() -> int:
     cfg = _load_config()
     sensor_type = cfg.sensor.sensor_type
@@ -273,6 +343,8 @@ def probe() -> int:
     try:
         if sensor_type == "capacitive":
             _watch_capacitive(int(cfg.sensor.i2c_address or 0x5A), cfg.sensor.touch_channel)
+        elif sensor_type == "gamepad":
+            _watch_gamepad(cfg.sensor.gamepad_device, cfg.gamepad)
         else:
             _watch_digital(cfg.sensor.gpio_pin, cfg.sensor.pull_up, cfg.sensor.bounce_time_ms)
     except KeyboardInterrupt:
@@ -286,7 +358,7 @@ def probe() -> int:
     return 0
 
 
-# --- fitting the pad ---------------------------------------------------------
+# --- fitting the sensor ------------------------------------------------------
 
 # Blinka and the MPR121 driver. Neither is packaged for apt, so the deb cannot
 # depend on them, and without them a correctly wired pad still does nothing:
@@ -309,9 +381,19 @@ TOUCH_SETTINGS: tuple[tuple[str, str], ...] = (
 )
 
 
-def touch_settings_missing(current: dict[str, str]) -> list[tuple[str, str]]:
+# What the shipped gamepad wants. A held button closes its contact, the same
+# polarity as the pad — left on "open" the piece would run whenever nobody is
+# holding anything.
+GAMEPAD_SETTINGS: tuple[tuple[str, str], ...] = (
+    ("sensor.sensor_type", "gamepad"),
+    ("sensor.engaged_when", "closed"),
+)
+
+
+def settings_missing(wanted: tuple[tuple[str, str], ...],
+                     current: dict[str, str]) -> list[tuple[str, str]]:
     """The settings the config does not already carry, in file order."""
-    return [(key, value) for key, value in TOUCH_SETTINGS if current.get(key) != value]
+    return [(key, value) for key, value in wanted if current.get(key) != value]
 
 
 def fit_plan(i2c_ready: bool, driver_ready: bool, tools_ready: bool,
@@ -334,7 +416,7 @@ def fit_plan(i2c_ready: bool, driver_ready: bool, tools_ready: bool,
     return steps
 
 
-def _current_touch_settings(cfg: Any) -> dict[str, str]:
+def _current_settings(cfg: Any) -> dict[str, str]:
     address = cfg.sensor.i2c_address
     return {
         "sensor.sensor_type": cfg.sensor.sensor_type,
@@ -412,10 +494,10 @@ def _fit_config(missing: list[tuple[str, str]], sensor_type: str) -> int:
     return 0 if _run(["motion-player-setup", *args]) else 1
 
 
-def fit() -> int:
-    cfg = _load_config()
-    current = _current_touch_settings(cfg)
-    missing = touch_settings_missing(current)
+def _fit_touch(cfg: Any) -> int:
+    """The touch pad: a bus to enable, a driver to install, a polarity to write."""
+    current = _current_settings(cfg)
+    missing = settings_missing(TOUCH_SETTINGS, current)
     steps = fit_plan(_I2C_DEVICE.exists(), _driver_ready(),
                      shutil.which("i2cdetect") is not None, not missing)
 
@@ -453,16 +535,59 @@ def fit() -> int:
     return 0
 
 
+def _fit_gamepad(cfg: Any) -> int:
+    """The gamepad: nothing to install, only a pad to find and a config to write.
+
+    The kernel's joystick driver is already there, so fitting one is finding it,
+    checking this user may read it, and pointing the config at it.
+    """
+    from sensors.gamepad import device_name, find_device
+
+    current = _current_settings(cfg)
+    missing = settings_missing(GAMEPAD_SETTINGS, current)
+
+    print("Fitting the gamepad — a USB controller, held to rewind\n")
+    path = find_device(cfg.sensor.gamepad_device)
+    if path is None:
+        print(f"No pad at {cfg.sensor.gamepad_device}. Plug one into a USB port and run")
+        print("this again — the kernel needs no driver for it.")
+        return 1
+    print(f"Found {device_name(path)} at {path}")
+    if not os.access(path, os.R_OK):
+        print(f"  {path} is not readable by {os.environ.get('USER', 'this user')} — "
+              f"sudo usermod -aG input $USER, then log out and back in")
+
+    if missing:
+        print("\nWriting the gamepad's config")
+        code = _fit_config(missing, current["sensor.sensor_type"])
+        if code:
+            return code
+    else:
+        print("The config already names the gamepad.")
+
+    print("\nNext: motion-player-sensor --probe, then press and hold a button.")
+    return 0
+
+
+def fit() -> int:
+    """Fit the sensor the config names, or the shipped gamepad if it names neither."""
+    cfg = _load_config()
+    if cfg.sensor.sensor_type == "capacitive":
+        return _fit_touch(cfg)
+    return _fit_gamepad(cfg)
+
+
 USAGE = """motion-player-sensor — check the sensor the piece is configured to use.
 
   motion-player-sensor --report   what is configured, what is wired, what the log saw
   motion-player-sensor --probe    watch it live with the engine stopped, then restart it
-  motion-player-sensor --fit      the software half of fitting the touch pad
+  motion-player-sensor --fit      find the pad, check it, and point the config at it
 
 --report changes nothing and is safe to run during the show. --probe stops the
 engine for as long as it runs, so the piece is dark while you are watching.
---fit enables I2C, installs the MPR121 driver and writes the pad's config; it
-skips whatever is already done, so it is safe to run twice.
+--fit fits the sensor the config names: a gamepad is found and pointed at, a
+touch pad also gets I2C enabled and its MPR121 driver installed. It skips
+whatever is already done, so it is safe to run twice.
 """
 
 

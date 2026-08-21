@@ -12,7 +12,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
 | `motion-player-setup` | `--set section.key=value` `--save-setup NAME` `--load-setup NAME` `--list-setups` | guided configuration: setups menu (save/load/duplicate a named configuration), screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
-| `motion-player-sensor` | `--report` `--probe` `--fit` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened; `--fit` does the software half of fitting the touch pad |
+| `motion-player-sensor` | `--report` `--probe` `--fit` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened; `--fit` finds the sensor and points the config at it |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
@@ -809,6 +809,70 @@ motion-player --log
 The log is the primary output channel — the engine writes almost nothing to a
 terminal unless you pass `--verbose`.
 
+### Fitting the gamepad
+
+The shipped sensor is a USB game controller: the visitor holds a button and the
+piece rewinds for as long as it is held. Nothing to wire and no driver to
+install — the kernel presents any USB pad as `/dev/input/js0`.
+
+```bash
+motion-player-sensor --fit
+```
+
+Finds the pad, says what it calls itself, checks this user may read it, and
+writes `sensor_type = gamepad` with `engaged_when = closed` — a held button is
+engaged when its contact closes, and left on `open` the piece would run
+whenever nobody is holding anything.
+
+`[sensor] gamepad_device` picks the pad: `auto` takes the first one plugged in,
+or name one (`/dev/input/js1`) to pin it when there are two.
+
+### What each control does
+
+An NES-style pad has Select, Start, A, B and four arrows, and the `[gamepad]`
+section gives each a job:
+
+| Setting | Ships as | What it does |
+| --- | --- | --- |
+| `hold` | `start+select` | held to wind the piece back — the interaction itself. `any` means any button, which suits a pad that does nothing else. |
+| `kaleidoscope` | `a+b` | switches the picture between the plain render and its kaleidoscope twin |
+| `audio_up`, `audio_down`, `audio_left`, `audio_right` | empty | one sound per arrow, chosen live while the piece runs |
+
+A control can only hold **or** do something else — if A toggles the
+kaleidoscope, A cannot also be the rewind.
+
+The pad reports each button as a number, and pads disagree about which is
+which. The numbers ship as `a = 1`, `b = 0`, `select = 2`, `start = 3`; if this
+pad says otherwise, `--probe` prints the name and number of everything you
+press, and correcting the four numbers in `[gamepad]` fixes every job at once.
+The arrows are usually an axis pair and need no numbers — if `--probe` shows
+them as buttons on yours, give them numbers too.
+
+### The kaleidoscope twin
+
+The effect is baked at render time, not applied per frame, so it costs the
+rewind nothing:
+
+```bash
+motion-player-prepare piece_portrait.mp4 --size 800x480 --fx kaleidoscope
+```
+
+That writes `piece_portrait.kaleidoscope.800x480.mp4` and its reverse, and
+offers to set `media.kaleidoscope_file` — the twin the pad switches to, never
+`video_file`, which is the piece itself. `motion-player-prepare-all` builds one
+for every screen profile it can (`vsdisplay-kaleido`, `hosyond-kaleido`,
+`tekgroaml-kaleido`); the Lian Li tile has none, since the kaleidoscope cannot
+be combined with `--mode tile`. With several screen shapes in one media folder,
+list the twins in `media.kaleidoscope_cuts` and the closest in shape to the
+attached screen is used, exactly as `media.cuts` works.
+
+Switching keeps the visitor's place: the twin is the same footage at the same
+length, so a rewind three quarters of the way back carries on from three
+quarters of the way back.
+
+A pad unplugged mid-hold lets go rather than leaving the piece stuck engaged,
+and is picked up again when it is plugged back in, without a restart.
+
 ### Fitting the touch pad
 
 Wire the MPR121 breakout to the Pi first — it shares the I²C bus with the LCD,
@@ -949,6 +1013,8 @@ description, edit the comments in `config/config.default.ini` and run
 | `audio_file` | `piece.wav` | — |
 | `reverse_file` | `piece.reverse.mp4` | Pre-reversed copy of video_file, built by motion-player-reverse. The rewind plays this forward so no frame is ever seeked to. |
 | `cuts` | `*(empty)*` | Optional alternative cuts of the same piece, framed for different screen shapes. The one closest in shape to the attached screen is used; video_file above is the fallback. Each needs its own reversed copy, named the same way motion-player-reverse writes it (piece_portrait.mp4 -> piece_portrait.reverse.mp4). |
+| `kaleidoscope_file` | `*(empty)*` | The kaleidoscope twin of the render — built by motion-player-prepare --fx kaleidoscope, or by motion-player-prepare-all's *-kaleido profiles. The gamepad switches the picture between the plain render and this one; leave it empty and that button does nothing. |
+| `kaleidoscope_cuts` | `*(empty)*` | Twins of the cuts above, matched to the screen the same way. One per cut, each needing its own reversed copy. |
 
 ### `[playback]`
 
@@ -996,19 +1062,39 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `sensor_type` | `capacitive` | sensor_type: switch \| reed \| beam \| reflective \| capacitive \| distance \| hall \| pir \| mmwave \| gpio_raw \| keyboard \| none "none" means no sensor is fitted: the piece loops forward and never rewinds. May be a fused list, e.g. switch+beam. |
+| `sensor_type` | `gamepad` | sensor_type: gamepad \| switch \| reed \| beam \| reflective \| capacitive \| distance \| hall \| pir \| mmwave \| gpio_raw \| keyboard \| none "none" means no sensor is fitted: the piece loops forward and never rewinds. May be a fused list, e.g. switch+beam. |
 | `sensor_combine` | `any` | sensor_combine: any \| all  (used only when fusing multiple sensors) |
-| `engaged_when` | `closed` | engaged_when: open \| closed — which raw electrical state means "lifted". A touch pad is engaged when its contact CLOSES; a cradle switch is lifted when its contact OPENS. Change this whenever sensor_type changes. |
+| `engaged_when` | `closed` | engaged_when: open \| closed — which raw electrical state means "lifted". A held button and a touch pad are engaged when their contact CLOSES; a cradle switch is lifted when its contact OPENS. Change this whenever sensor_type changes. |
 | `gpio_pin` | `4` | --- digital backends: switch, reed, beam, reflective, hall, pir, gpio_raw --- |
 | `pull_up` | `true` | — |
 | `trigger_pin` | `23` | --- distance backends --- |
 | `echo_pin` | `24` | — |
 | `threshold_cm` | `15` | — |
 | `touch_channel` | `0` | --- capacitive --- |
+| `gamepad_device` | `auto` | --- gamepad --- A USB game controller, read straight from the kernel's joystick device. "auto" takes the first pad plugged in; name one (/dev/input/js1) to pin it when there are two. |
 | `bounce_time_ms` | `50` | --- timing, all backends --- First-level hardware/library debounce (ms). |
 | `min_lift_ms` | `250` | How long a raw state must persist before it is accepted (ms). |
 | `min_replace_ms` | `250` | — |
 | `max_engaged_minutes` | `30` | Force back to idle if engaged this long (minutes). |
+
+### `[gamepad]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `a` | `1` | A USB game controller has more than one control, and each can do a job. The numbers below are what this pad reports for each button — motion-player-sensor --probe prints the number of whatever you press, and these are the usual values for NES-style USB pads. |
+| `b` | `0` | — |
+| `select` | `2` | — |
+| `start` | `3` | — |
+| `up` | `*(empty)*` | The four arrows are axes on most pads and need no numbers. If --probe shows them as buttons on yours, give their numbers here. |
+| `down` | `*(empty)*` | — |
+| `left` | `*(empty)*` | — |
+| `right` | `*(empty)*` | — |
+| `hold` | `start+select` | What the controls do. Names: a, b, select, start, up, down, left, right — joined with + for more than one, empty to switch the job off. hold          held to wind the piece back: the interaction itself. "any" means any button, which suits a pad that does nothing else. kaleidoscope  switches the picture between the plain render and its kaleidoscope twin (see media.kaleidoscope_file). |
+| `kaleidoscope` | `a+b` | — |
+| `audio_up` | `*(empty)*` | One sound per arrow, chosen live while the piece runs. Paths as in [media]; an empty one means that arrow changes nothing. |
+| `audio_down` | `*(empty)*` | — |
+| `audio_left` | `*(empty)*` | — |
+| `audio_right` | `*(empty)*` | — |
 
 ### `[schedule]`
 

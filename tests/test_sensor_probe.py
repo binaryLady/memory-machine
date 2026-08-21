@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from sensor_probe import (
+    GAMEPAD_SETTINGS,
     TOUCH_SETTINGS,
     fit_plan,
     format_report,
     hold_seconds,
     parse_log,
-    touch_settings_missing,
+    settings_missing,
 )
 
 
@@ -156,7 +157,7 @@ def test_touch_settings_are_the_shipped_defaults() -> None:
 
 
 def test_touch_settings_missing_is_empty_when_the_config_already_matches() -> None:
-    assert touch_settings_missing(touch_config_fixture()) == []
+    assert settings_missing(TOUCH_SETTINGS, touch_config_fixture()) == []
 
 
 def test_touch_settings_missing_carries_the_polarity_and_address_with_the_sensor() -> None:
@@ -164,7 +165,7 @@ def test_touch_settings_missing_carries_the_polarity_and_address_with_the_sensor
                                      "sensor.engaged_when": "open",
                                      "sensor.i2c_address": "0x29"})
 
-    assert touch_settings_missing(switch) == [
+    assert settings_missing(TOUCH_SETTINGS, switch) == [
         ("sensor.sensor_type", "capacitive"),
         ("sensor.engaged_when", "closed"),
         ("sensor.i2c_address", "0x5a"),
@@ -174,6 +175,23 @@ def test_touch_settings_missing_carries_the_polarity_and_address_with_the_sensor
 def test_touch_settings_missing_treats_an_unset_address_as_missing() -> None:
     # The backend falls back to 0x5a when the key is unset, but the report and
     # the wizard both state it, so --fit writes it rather than leaving it blank.
-    assert touch_settings_missing(touch_config_fixture(**{"sensor.i2c_address": ""})) == [
+    assert settings_missing(TOUCH_SETTINGS, touch_config_fixture(**{"sensor.i2c_address": ""})) == [
         ("sensor.i2c_address", "0x5a"),
+    ]
+
+
+def test_the_gamepad_carries_its_polarity_with_it() -> None:
+    # A held button closes its contact; left on "open" the piece would run
+    # whenever nobody is holding anything.
+    assert dict(GAMEPAD_SETTINGS) == {
+        "sensor.sensor_type": "gamepad",
+        "sensor.engaged_when": "closed",
+    }
+
+
+def test_settings_missing_reads_the_wanted_set_it_is_given() -> None:
+    pad_config = touch_config_fixture()
+
+    assert settings_missing(GAMEPAD_SETTINGS, pad_config) == [
+        ("sensor.sensor_type", "gamepad"),
     ]

@@ -27,6 +27,7 @@ class AudioEngine:
         self._resolved_sink = "default"
         self._duration_s = 0.0
         self._max_duration_s = 0.0
+        self._looping = False
 
         self._init_mixer()
         self._load()
@@ -130,6 +131,7 @@ class AudioEngine:
         if 0 < self._max_duration_s < self._duration_s:
             maxtime = int(self._max_duration_s * 1000)
         self._sound.play(maxtime=maxtime)
+        self._looping = False
         LOGGER.debug("Audio started from start (maxtime=%dms)", maxtime)
 
     def play_looping(self) -> None:
@@ -145,6 +147,7 @@ class AudioEngine:
         self._sound.stop()
         self._sound.set_volume(self._volume)
         self._sound.play(loops=-1)
+        self._looping = True
         LOGGER.info("Audio looping continuously (audio_mode=always)")
 
     def fade_out(self, ms: int) -> None:
@@ -152,6 +155,37 @@ class AudioEngine:
             return
         self._sound.fadeout(ms)
         LOGGER.debug("Audio fading out over %d ms", ms)
+
+    def switch_to(self, path: Path) -> bool:
+        """Play a different sound, in whatever way the current one was playing.
+
+        The sounds are alternative accompaniments to one piece, not a playlist:
+        the new one starts from its own beginning, and if the old one was
+        looping under audio_mode=always the new one loops too.
+        """
+        if path == self._audio_path:
+            return False
+        if not path.exists():
+            LOGGER.error("Audio not found, keeping %s: %s", self._audio_path.name, path)
+            return False
+
+        was_playing, was_looping = self.is_playing, self._looping
+        previous, previous_sound = self._audio_path, self._sound
+        if previous_sound is not None:
+            previous_sound.stop()
+        self._audio_path = path
+        self._load()
+        if self._sound is None:
+            # A sound that will not load leaves the piece silent; go back to the
+            # one that was working rather than to nothing.
+            LOGGER.error("Could not load %s; returning to %s", path.name, previous.name)
+            self._audio_path, self._sound = previous, previous_sound
+            self._duration_s = previous_sound.get_length() if previous_sound else 0.0
+
+        if was_playing:
+            self.play_looping() if was_looping else self.play_from_start()
+        LOGGER.info("Audio switched to %s", self._audio_path.name)
+        return True
 
     @property
     def is_playing(self) -> bool:
@@ -183,6 +217,10 @@ class AlwaysOnAudio:
 
     def fade_out(self, ms: int) -> None:
         pass
+
+    def switch_to(self, path: Any) -> bool:
+        """Choosing a different sound is not the state machine starting one."""
+        return self._engine.switch_to(path)
 
     @property
     def is_playing(self) -> bool:

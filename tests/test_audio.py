@@ -190,3 +190,34 @@ def test_always_on_audio_still_reports_the_real_engines_state() -> None:
 
     spy.is_playing = False
     assert wrapped.is_playing is False
+
+
+def test_switching_sound_loops_the_new_one_when_the_old_one_was_looping(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, tmp_path)
+    other = tmp_path / "second.wav"
+    other.touch()
+    engine.play_looping()
+
+    assert engine.switch_to(other) is True
+    assert engine._audio_path == other
+    assert engine._looping is True, "audio_mode=always keeps looping across a switch"
+
+
+def test_switching_to_the_sound_already_playing_changes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, tmp_path)
+
+    assert engine.switch_to(engine._audio_path) is False
+
+
+def test_a_missing_sound_leaves_the_one_that_works(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = make_engine(monkeypatch, tmp_path)
+    playing = engine._audio_path
+
+    assert engine.switch_to(tmp_path / "never-rendered.wav") is False
+    assert engine._audio_path == playing
