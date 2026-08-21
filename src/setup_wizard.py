@@ -566,6 +566,7 @@ def main() -> int:
                     ("title", "Title line (up to 18 characters)"),
                     ("label_idle", "Word for at rest"),
                     ("label_engaged", "Word for listening"),
+                    ("label_reward", "Word for the turn (the reward)"),
                     ("label_hello", "Word on waking"),
                     ("label_sleep", "Word overnight"),
                     ("label_goodbye", "Word at shutdown"),

@@ -70,6 +70,7 @@ class LcdConfig:
     title: str
     label_idle: str
     label_engaged: str
+    label_reward: str
     label_hello: str
     label_sleep: str
     label_goodbye: str
@@ -195,6 +196,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "title": "memory-machine",
         "label_idle": "at rest",
         "label_engaged": "listening",
+        "label_reward": "I see you",
         "label_hello": "hello",
         "label_sleep": "goodnight",
         "label_goodbye": "goodbye",
@@ -445,6 +447,9 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             label_idle=_parse_panel_text(lcd_raw.get("label_idle"), DEFAULTS["lcd"]["label_idle"]),
             label_engaged=_parse_panel_text(
                 lcd_raw.get("label_engaged"), DEFAULTS["lcd"]["label_engaged"]
+            ),
+            label_reward=_parse_panel_text(
+                lcd_raw.get("label_reward"), DEFAULTS["lcd"]["label_reward"]
             ),
             label_hello=_parse_panel_text(lcd_raw.get("label_hello"), DEFAULTS["lcd"]["label_hello"]),
             label_sleep=_parse_panel_text(lcd_raw.get("label_sleep"), DEFAULTS["lcd"]["label_sleep"]),

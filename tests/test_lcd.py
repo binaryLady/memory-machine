@@ -343,11 +343,28 @@ def test_show_moods_follow_the_piece() -> None:
     assert lcd.show_mood("SLEEP") == "dark"
 
 
-def test_listening_is_livelier_than_rest() -> None:
-    calm_shown, _ = lcd.show_stars("calm", full=True)
-    lively_shown, _ = lcd.show_stars("lively", full=True)
+def test_each_mood_has_its_own_constellation() -> None:
+    """Liveliness rides the tempo (engaged bpm), the pattern marks the mood."""
+    calm = lcd.show_stars("calm", full=True)
+    lively = lcd.show_stars("lively", full=True)
 
-    assert len(lively_shown) > len(calm_shown)
+    assert calm != lively
+
+
+def test_the_reward_flashes_the_whole_sky_with_the_beat() -> None:
+    shown_full, hidden_full = lcd.show_stars("radiant", full=True)
+    shown_relax, hidden_relax = lcd.show_stars("radiant", full=False)
+
+    assert set(shown_full) == set(lcd.ALL_SHOW_STARS) and hidden_full == ()
+    assert shown_relax == () and set(hidden_relax) == set(lcd.ALL_SHOW_STARS)
+
+
+def test_the_reward_speaks_its_own_word() -> None:
+    assert lcd.show_mood("REWARD") == "radiant"
+    assert lcd.mood_word("radiant", lcd.DEFAULT_LABELS) == "I see you"
+    assert lcd.state_label("REWARD") == "I see you"
+    words = dict(lcd.DEFAULT_LABELS, reward="See me too")
+    assert lcd.mood_word("radiant", words) == "See me too"
 
 
 def test_hello_lights_every_star_and_hides_none() -> None:

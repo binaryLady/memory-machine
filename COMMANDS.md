@@ -888,6 +888,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
 | `label_idle` | `at rest` | — |
 | `label_engaged` | `listening` | — |
+| `label_reward` | `I see you` | Spoken when a visitor stays through the whole rewind and the piece turns forward — the reward for staying present. |
 | `label_hello` | `hello` | — |
 | `label_sleep` | `goodnight` | — |
 | `label_goodbye` | `goodbye` | — |

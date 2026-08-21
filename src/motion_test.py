@@ -175,7 +175,13 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         _apply_schedule_transition(scheduler.poll(now), state, video, audio, telemetry, cfg)
         display_state = "SLEEP" if scheduler.asleep else state.state
         status.set_state(display_state)
-        heartbeat.set_state(display_state)
+        # The panel narrates the drama, not just the sensor: staying through
+        # the whole rewind turns the piece forward, and the panel should mark
+        # that moment with its own words.
+        panel_state = display_state
+        if display_state == "ENGAGED" and video.mode == "FORWARD":
+            panel_state = "REWARD"
+        heartbeat.set_state(panel_state)
 
         # Video at-start detection.
         if not scheduler.asleep and state.state == "ENGAGED" and video.at_start:
