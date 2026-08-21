@@ -510,8 +510,8 @@ setup wizard sets the mode with its gallery/test presets.
 ## The heartbeat panel
 
 An optional 20x4 character LCD on I2C, showing a beating heart above the
-installation's health. The heart beats slowly at rest and quickens while the
-a visitor engages the piece, so the panel reports its state rather than
+installation's health. The heart beats slowly at rest and quickens while a
+visitor holds the pad, so the panel reports its state rather than
 just the machine.
 
 Enable I2C once, then find the panel's address — these modules are almost always
@@ -532,7 +532,7 @@ engaged_bpm = 100
 sleep_bpm   = 0
 ```
 
-The heart beats at `idle_bpm` at rest and `engaged_bpm` while someone listens;
+The heart beats at `idle_bpm` at rest and `engaged_bpm` while someone holds on;
 overnight it slows to `sleep_bpm` — 0 holds it still — while the backlight goes
 dark and the panel says goodnight. It says hello for a few seconds at wake, and
 goodbye when the piece shuts down.
@@ -582,6 +582,26 @@ flip, when a visitor has stayed through the whole rewind, the word changes
 (`label_reward`, default `I see you`) and the whole sky flashes with the
 beat. Glyph memory is reprogrammed only when the face changes, never per
 beat, so the animation stays a handful of character writes.
+
+### The second panel — the visitor's instruction card
+
+A second 20x4 panel on the same bus renders the controller instructions from
+[CONTROLLER.md](CONTROLLER.md) as a rotating deck of pages, each led by
+`Memory<>Machine` with the heart beating beside it and a star twinkling in
+the far corner. Jumper the second backpack to its own address (solder-bridge
+A0, usually giving 0x26), confirm both appear in `i2cdetect -y 1`, then:
+
+```bash
+sudo motion-player-setup --set lcd2.enabled=true
+```
+
+Every `[lcd]` key works in `[lcd2]` — icon, bpm, labels — plus the deck's
+own: `page_seconds` for how long each page stays up, and `page_1` …
+`page_6` to replace the shipped words, up to four lines per page separated
+by `|`, each up to 20 printable ASCII columns. The card rotates whenever the
+piece is awake and goes dark overnight with everything else; unplugging it
+mid-show only logs an error and never touches playback or the heartbeat
+panel.
 
 ### The captain's log
 
@@ -1043,13 +1063,15 @@ description, edit the comments in `config/config.default.ini` and run
 | Key | Default | What it is |
 | --- | --- | --- |
 | `enabled` | `false` | An optional 20x4 character LCD on I2C showing a beating heart and health figures. The heart quickens while a visitor is engaged with the piece. |
+| `i2c_bus` | `1` | — |
+| `i2c_address` | `0x27` | — |
 | `idle_bpm` | `60` | — |
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
-| `layout` | `status` | layout: status \| art \| show. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. show keeps the title always up over the centered beating icon, with stars whose energy follows the piece's state — calm at rest, lively while someone listens, every star lit for the wake-up hello. |
-| `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
+| `layout` | `status` | layout: status \| art \| show \| instructions. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. show keeps the title always up over the centered beating icon, with stars whose energy follows the piece's state — calm at rest, lively while someone holds on, every star lit for the wake-up hello. instructions turns the panel into the visitor's rotating instruction card — see [lcd2], the second panel it was made for. |
+| `title` | `Memory<>Machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
 | `label_idle` | `at rest` | — |
-| `label_engaged` | `listening` | — |
+| `label_engaged` | `holding on` | — |
 | `label_reward` | `I see you` | Spoken when a visitor stays through the whole rewind and the piece turns forward — the reward for staying present. |
 | `label_hello` | `hello` | — |
 | `label_sleep` | `goodnight` | — |
@@ -1057,6 +1079,22 @@ description, edit the comments in `config/config.default.ini` and run
 | `icon` | `heart` | icon: heart \| star \| ring \| note \| eye \| none — the beating glyph beside the title — or the name of a pixel-art file at ~/memory-machine-media/icons/<name>.txt (up to 10x16 pixels; see COMMANDS.md). |
 | `icon_full` | `*(empty)*` | Or draw your own 5x8 icon: 8 comma-separated row values 0-31, top to bottom (each row is 5 bits, e.g. 0,10,31,31,31,14,4,0 is the heart). Set both — the full shape and the relaxed one it beats against. |
 | `icon_small` | `*(empty)*` | — |
+
+### `[lcd2]`
+
+| Key | Default | What it is |
+| --- | --- | --- |
+| `enabled` | `false` | A second 20x4 panel — the visitor's instruction card, distilled from CONTROLLER.md. It shares the shared I2C bus with the heartbeat panel; jumper its backpack to a different address (usually 0x26). Every [lcd] key works here too — icon, bpm, labels, layout — and it goes dark overnight with the rest of the piece. |
+| `i2c_bus` | `1` | — |
+| `i2c_address` | `0x26` | — |
+| `layout` | `instructions` | — |
+| `page_seconds` | `6` | Seconds each instruction page stays up before the deck turns. |
+| `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and hers underneath. |
+| `page_2` | `*(empty)*` | — |
+| `page_3` | `*(empty)*` | — |
+| `page_4` | `*(empty)*` | — |
+| `page_5` | `*(empty)*` | — |
+| `page_6` | `*(empty)*` | — |
 
 ### `[sensor]`
 
@@ -1070,6 +1108,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `trigger_pin` | `23` | --- distance backends --- |
 | `echo_pin` | `24` | — |
 | `threshold_cm` | `15` | — |
+| `i2c_address` | `0x5a` | --- i2c backends: capacitive (MPR121, 0x5a) and distance (VL53L0X, 0x29) --- One key, read by whichever backend sensor_type names, so it has to match the sensor in use. Leave it unset and each backend falls back to its own default. |
 | `touch_channel` | `0` | --- capacitive --- |
 | `gamepad_device` | `auto` | --- gamepad --- A USB game controller, read straight from the kernel's joystick device. "auto" takes the first pad plugged in; name one (/dev/input/js1) to pin it when there are two. |
 | `bounce_time_ms` | `50` | --- timing, all backends --- First-level hardware/library debounce (ms). |

@@ -174,6 +174,75 @@ def test_a_nonsense_layout_is_reported(tmp_path) -> None:
     assert [p for p in config.validate(cfg) if "lcd.layout" in p]
 
 
+def test_the_second_panel_ships_as_the_instruction_card(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[lcd]\nenabled = true\n")
+    cfg = config.load(path)
+
+    assert cfg.lcd2.enabled is False
+    assert cfg.lcd2.i2c_address == 0x26
+    assert cfg.lcd2.i2c_bus == 1
+    assert cfg.lcd2.layout == "instructions"
+    assert cfg.lcd2.pages == ()
+    assert cfg.lcd2.page_seconds == 6.0
+    assert not [p for p in config.validate(cfg) if "lcd2" in p]
+
+
+def test_instructions_is_a_layout_the_first_panel_may_wear_too(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[lcd]\nlayout = instructions\n")
+    cfg = config.load(path)
+
+    assert not [p for p in config.validate(cfg) if "lcd.layout" in p]
+
+
+def test_pages_parse_as_pipe_separated_ascii_lines(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """
+        [lcd2]
+        page_1 = Memory<>Machine|HOLD START|she rewinds
+        page_3 = one line only
+        page_2 = cœur ♥|second
+        """,
+    )
+    cfg = config.load(path)
+
+    assert cfg.lcd2.pages == (
+        ("Memory<>Machine", "HOLD START", "she rewinds"),
+        ("cur", "second"),
+        ("one line only",),
+    )
+
+
+def test_a_page_line_past_the_panel_width_is_cut(tmp_path: Path) -> None:
+    path = _write(tmp_path, f"[lcd2]\npage_1 = {'x' * 30}|ok\n")
+    cfg = config.load(path)
+
+    assert cfg.lcd2.pages == (("x" * 20, "ok"),)
+
+
+def test_two_panels_on_one_address_are_called_out(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """
+        [lcd]
+        enabled = true
+        [lcd2]
+        enabled = true
+        i2c_address = 0x27
+        """,
+    )
+    cfg = config.load(path)
+
+    assert [p for p in config.validate(cfg) if "two panels need two addresses" in p]
+
+
+def test_two_panels_on_their_own_addresses_are_fine(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[lcd]\nenabled = true\n[lcd2]\nenabled = true\n")
+    cfg = config.load(path)
+
+    assert not [p for p in config.validate(cfg) if "address" in p]
+
+
 def test_audio_mode_defaults_to_always_when_the_key_is_absent(tmp_path: Path) -> None:
     # rhubarb's /etc config predates the key entirely; this is what it gets.
     path = _write(tmp_path, "[audio]\nvolume = 0.5\n")

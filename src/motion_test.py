@@ -19,7 +19,7 @@ import status as status_module
 from audio import AlwaysOnAudio, AudioEngine
 import sysinfo
 from journal import Journal
-from lcd import Heartbeat
+from lcd import Panels
 from schedule import SleepScheduler
 from sensors import NullSensor, make_sensor, start_sensor
 from state import StateMachine
@@ -124,7 +124,7 @@ def _handle_control(event: str, video: VideoEngine, audio: AudioEngine,
 
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int,
-               heartbeat: Heartbeat, journal: Journal) -> int:
+               heartbeat: Panels, journal: Journal) -> int:
     events: queue.Queue = queue.Queue()
     started = start_sensor(sensor, events)
     degraded = started is not sensor
@@ -323,7 +323,7 @@ def run(argv: list[str] | None = None) -> int:
             video,
             status,
         )
-        heartbeat = Heartbeat(cfg, status)
+        heartbeat = Panels(cfg, status)
         heartbeat.start()
         journal = Journal(state_dir / "journal")
         log_path = state_dir / "motion-player.log"

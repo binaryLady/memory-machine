@@ -77,7 +77,7 @@ def parse_default_ini() -> list[tuple[str, list[tuple[str, str, str]]]]:
         if stripped.startswith(";"):
             comment.append(stripped.lstrip("; ").strip())
             continue
-        match = re.match(r"([a-z_]+)\s*=\s*(.*)", stripped)
+        match = re.match(r"([a-z0-9_]+)\s*=\s*(.*)", stripped)
         if match and sections:
             sections[-1][1].append(
                 (match.group(1), match.group(2), " ".join(comment))

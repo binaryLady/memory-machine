@@ -53,15 +53,30 @@ GLYPHS: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
     ),
 }
 
-DEFAULT_TITLE = "memory-machine"
+DEFAULT_TITLE = "Memory<>Machine"
 DEFAULT_LABELS = {
     "idle": "at rest",
-    "engaged": "listening",
+    "engaged": "holding on",
     "reward": "I see you",
     "hello": "hello",
     "sleep": "goodnight",
     "goodbye": "goodbye",
 }
+
+# The instructions panel: her name on every page, the controls in the
+# operator's words, hers underneath. Each page is up to four rows of at most
+# 20 printable-ASCII columns; the first row leaves the icon's columns clear.
+DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
+    ("Memory<>Machine", "PLAYER DETECTED", "she is watching", "you, watching her"),
+    ("Memory<>Machine", "HOLD START or SELECT", "she plays in reverse", "let go: she returns"),
+    ("Memory<>Machine", "stay to the start", "and she turns", "to face you"),
+    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: her sounds", "one voice each"),
+    ("Memory<>Machine", "observed as object", "or understood?", "NO WRONG MOVES"),
+)
+
+# The instructions panel's twinkle: the title row's far corner, past where a
+# centered title reaches, alternating with the beat like the show corners.
+INSTRUCTION_STARS = (((0, 18),), ((0, 19),))
 
 
 @dataclass(frozen=True)
@@ -386,8 +401,35 @@ def format_rows(
         center_line(title),
         center_line(listening),
         f"cpu {cpu_percent:3.0f}%   {temperature_c:4.1f}C",
-        f"lifts {lifts:<5} up {uptime}",
+        f"holds {lifts:<5} up {uptime}",
     ]
+    return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
+
+
+def instruction_pages(config: Any) -> tuple[tuple[str, ...], ...]:
+    """The instruction card's pages: the operator's own, or the shipped deck."""
+    pages = getattr(config, "pages", ()) or ()
+    return tuple(pages) if pages else DEFAULT_INSTRUCTION_PAGES
+
+
+def page_index(elapsed_s: float, page_seconds: float, count: int) -> int:
+    """Which page the deck shows after `elapsed_s` of rotation."""
+    if count <= 0:
+        return 0
+    if page_seconds <= 0:
+        return 0
+    return int(max(0.0, elapsed_s) // page_seconds) % count
+
+
+def instruction_rows(pages: tuple[tuple[str, ...], ...], index: int) -> list[str]:
+    """One page as four full-width rows: title row past the icon, the rest
+    centered on the whole panel."""
+    page = pages[index % len(pages)] if pages else ()
+    lines = list(page[:ROWS]) + [""] * (ROWS - len(page[:ROWS]))
+    rows = [center_line(lines[0])]
+    for line in lines[1:]:
+        pad = max(0, (COLUMNS - len(line)) // 2)
+        rows.append(" " * pad + line)
     return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
 
 
@@ -468,7 +510,7 @@ class Heartbeat:
     """
 
     def __init__(self, config: Any, status: Any) -> None:
-        self._config = config.lcd
+        self._config = config
         self._status = status
         self._state = "IDLE"
         self._lcd: Hd44780I2c | None = None
@@ -481,6 +523,8 @@ class Heartbeat:
         title = getattr(self._config, "title", None)
         self._title = DEFAULT_TITLE if title is None else title
         self._layout = str(getattr(self._config, "layout", "status")).lower()
+        self._pages = instruction_pages(self._config)
+        self._page_seconds = float(getattr(self._config, "page_seconds", 6.0))
 
     def _open(self) -> Hd44780I2c | None:
         try:
@@ -521,7 +565,11 @@ class Heartbeat:
         self._lcd = self._open()
         if self._lcd is None:
             return
-        self._thread = threading.Thread(target=self._run, name="lcd-heartbeat", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"lcd-heartbeat-0x{self._config.i2c_address:02X}",
+            daemon=True,
+        )
         self._thread.start()
 
     def set_state(self, state: str) -> None:
@@ -666,7 +714,20 @@ class Heartbeat:
                     self._stop.wait(0.05)
                     continue
 
-                if self._layout != "art" and now >= next_stats:
+                if self._layout == "instructions":
+                    # The card deck turns on its own clock; a page only redraws
+                    # the rows that changed, and the icon's beat below stays
+                    # the shared heartbeat machinery.
+                    index = page_index(now - self._started_at, self._page_seconds, len(self._pages))
+                    rows = instruction_rows(self._pages, index)
+                    if rows != last_rows:
+                        for row_index, row in enumerate(rows):
+                            if row_index >= len(last_rows) or last_rows[row_index] != row:
+                                start = text_start(row_index, self._icon)
+                                lcd.write_at(row_index, start, row[start:])
+                        last_rows = rows
+
+                if self._layout not in ("art", "instructions") and now >= next_stats:
                     next_stats = now + 1.0
                     cpu, self._cpu_previous = read_cpu_percent(self._cpu_previous)
                     snapshot = self._status.snapshot()
@@ -709,9 +770,42 @@ class Heartbeat:
                                 lcd.write_at(row, col, " ")
                             for row, col in shown:
                                 lcd.write_at(row, col, "*")
+                        elif self._layout == "instructions":
+                            first, second = INSTRUCTION_STARS
+                            shown, hidden = (first, second) if full else (second, first)
+                            for row, col in hidden:
+                                lcd.write_at(row, col, " ")
+                            for row, col in shown:
+                                lcd.write_at(row, col, "*")
                         last_full = full
             except Exception as exc:  # noqa: BLE001
                 LOGGER.error("LCD panel write failed; stopping the panel: %s", exc)
                 return
 
             self._stop.wait(0.05)
+
+
+class Panels:
+    """Both panels — the heartbeat and the instruction card — as one object.
+
+    Each panel opens its own bus handle and runs its own thread; one failing,
+    or being absent, never touches the other.
+    """
+
+    def __init__(self, config: Any, status: Any) -> None:
+        self._panels = [
+            Heartbeat(config.lcd, status),
+            Heartbeat(config.lcd2, status),
+        ]
+
+    def start(self) -> None:
+        for panel in self._panels:
+            panel.start()
+
+    def set_state(self, state: str) -> None:
+        for panel in self._panels:
+            panel.set_state(state)
+
+    def stop(self) -> None:
+        for panel in self._panels:
+            panel.stop()
