@@ -281,6 +281,12 @@ apply_config() {
     local setup
     setup="$(command -v motion-player-setup || true)"
     [ -n "$setup" ] || setup="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/motion-player-setup"
+    # A kaleidoscope render is the twin the pad switches to, not the render the
+    # piece plays: pointing video_file at it would make the effect the piece.
+    if [ "$FX" = "kaleidoscope" ]; then
+        "$setup" --set "media.kaleidoscope_file=$(basename "$OUT")"
+        return
+    fi
     "$setup" \
         --set "media.video_file=$(basename "$OUT")" \
         --set "media.reverse_file=$(basename "$REVERSE")" \
@@ -288,7 +294,11 @@ apply_config() {
 }
 
 if [ "$APPLY" = "ask" ] && [ -t 0 ]; then
-    printf '\nPoint the config at %s now? [Y/n]: ' "$(basename "$OUT")"
+    if [ "$FX" = "kaleidoscope" ]; then
+        printf '\nMake %s the kaleidoscope twin the gamepad switches to? [Y/n]: ' "$(basename "$OUT")"
+    else
+        printf '\nPoint the config at %s now? [Y/n]: ' "$(basename "$OUT")"
+    fi
     read -r answer
     case "$answer" in n|N|no|NO) APPLY=no ;; *) APPLY=yes ;; esac
 fi
@@ -300,6 +310,21 @@ if [ "$APPLY" = "yes" ]; then
     echo
     echo "The media now matches the output exactly, so playback does no scaling at all."
 else
+    if [ "$FX" = "kaleidoscope" ]; then
+        cat <<EOF
+
+Done. This is a twin, not the piece — the gamepad switches to it:
+
+  [media]
+  kaleidoscope_file = $(basename "$OUT")
+
+With several screen shapes, add it to the twin list instead, one per cut:
+
+  [media]
+  kaleidoscope_cuts = ..., $(basename "$OUT")
+EOF
+        exit 0
+    fi
     cat <<EOF
 
 Done. Point the config at these:

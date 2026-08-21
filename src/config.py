@@ -46,6 +46,8 @@ class MediaConfig:
     audio_file: Path
     reverse_file: Path
     cuts: tuple[Path, ...]
+    kaleidoscope_file: Path | None
+    kaleidoscope_cuts: tuple[Path, ...]
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,21 @@ class AudioConfig:
 
 
 @dataclass(frozen=True)
+class GamepadConfig:
+    """What each control on the pad is called, and what it does.
+
+    numbers maps a control name to the number this pad reports for it; the four
+    arrows are axes on most pads and stay None unless a number is given. jobs
+    maps a job — "hold", "kaleidoscope" — to the control names that drive it,
+    and audio maps a control name to the sound it chooses.
+    """
+
+    numbers: dict[str, int | None]
+    jobs: dict[str, tuple[str, ...]]
+    audio: dict[str, Path]
+
+
+@dataclass(frozen=True)
 class SensorConfig:
     sensor_type: str
     sensor_combine: str
@@ -101,6 +118,7 @@ class SensorConfig:
     threshold_cm: float
     i2c_address: int | None
     touch_channel: int
+    gamepad_device: str
     bounce_time_ms: int
     min_lift_ms: int
     min_replace_ms: int
@@ -140,6 +158,7 @@ class Config:
     audio: AudioConfig
     lcd: LcdConfig
     sensor: SensorConfig
+    gamepad: GamepadConfig
     system: SystemConfig
     schedule: ScheduleConfig
     telemetry: TelemetryConfig
@@ -171,6 +190,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "audio_file": "piece.wav",
         "reverse_file": "piece.reverse.mp4",
         "cuts": "",
+        "kaleidoscope_file": "",
+        "kaleidoscope_cuts": "",
     },
     "playback": {
         "idle_mode": "hold_first_frame",
@@ -208,7 +229,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "layout": "status",
     },
     "sensor": {
-        "sensor_type": "capacitive",
+        "sensor_type": "gamepad",
         "sensor_combine": "any",
         "engaged_when": "closed",
         "gpio_pin": 4,
@@ -218,10 +239,27 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "threshold_cm": 15.0,
         "i2c_address": None,
         "touch_channel": 0,
+        "gamepad_device": "auto",
         "bounce_time_ms": 50,
         "min_lift_ms": 250,
         "min_replace_ms": 250,
         "max_engaged_minutes": 30,
+    },
+    "gamepad": {
+        "a": 1,
+        "b": 0,
+        "select": 2,
+        "start": 3,
+        "up": "",
+        "down": "",
+        "left": "",
+        "right": "",
+        "hold": "start+select",
+        "kaleidoscope": "a+b",
+        "audio_up": "",
+        "audio_down": "",
+        "audio_left": "",
+        "audio_right": "",
     },
     "schedule": {
         "enabled": False,
@@ -266,9 +304,15 @@ _VALID_SENSOR_TYPES = {
     "pir",
     "mmwave",
     "gpio_raw",
+    "gamepad",
     "keyboard",
 }
 _VALID_ENGAGED_WHEN = {"open", "closed"}
+_VALID_GAMEPAD_DIRECTIONS = {"left", "right", "up", "down"}
+# The face buttons by name, plus "any" for a pad that only ever holds.
+_GAMEPAD_BUTTONS = ("a", "b", "select", "start")
+_GAMEPAD_CONTROLS = {*_GAMEPAD_BUTTONS, "any"}
+_GAMEPAD_JOBS = ("hold", "kaleidoscope")
 _VALID_SENSOR_COMBINE = {"any", "all"}
 
 
@@ -365,6 +409,35 @@ def _parse_glyph(value: Any) -> tuple[int, ...] | None:
     return rows
 
 
+def _is_gamepad_control(control: str) -> bool:
+    """Whether the string names a control the gamepad backend can watch."""
+    if control in _GAMEPAD_CONTROLS or control in _VALID_GAMEPAD_DIRECTIONS:
+        return True
+    return control.startswith("b") and control[1:].isdigit()
+
+
+def _control_list(value: Any) -> tuple[str, ...]:
+    """"a+b" as ("a", "b"). Empty means the job is switched off."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return ()
+    return tuple(part.strip() for part in text.split("+") if part.strip())
+
+
+def _optional_int(value: Any) -> int | None:
+    """A control number, or None when the pad reports that control as an axis."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(text, 0)
+    except ValueError:
+        LOGGER.warning("Invalid gamepad control number %r; treating as unset", value)
+        return None
+
+
 def _parse_i2c_address(value: Any) -> int | None:
     if value is None or str(value).lower() in {"", "none", "false", "0x"}:
         return None
@@ -410,6 +483,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
     audio_raw = _section("audio")
     lcd_raw = _section("lcd")
     sensor_raw = _section("sensor")
+    gamepad_raw = _section("gamepad")
     schedule_raw = _section("schedule")
     system_raw = _section("system")
     telemetry_raw = _section("telemetry")
@@ -420,6 +494,11 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             audio_file=_resolve_path(str(media_raw.get("audio_file", DEFAULTS["media"]["audio_file"]))),
             reverse_file=_resolve_path(str(media_raw.get("reverse_file", DEFAULTS["media"]["reverse_file"]))),
             cuts=_path_list(media_raw.get("cuts")),
+            kaleidoscope_file=(
+                _resolve_path(str(media_raw.get("kaleidoscope_file")).strip())
+                if str(media_raw.get("kaleidoscope_file", "")).strip() else None
+            ),
+            kaleidoscope_cuts=_path_list(media_raw.get("kaleidoscope_cuts")),
         ),
         playback=PlaybackConfig(
             idle_mode=str(playback_raw.get("idle_mode", DEFAULTS["playback"]["idle_mode"])),
@@ -476,6 +555,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             threshold_cm=_parse_float(sensor_raw.get("threshold_cm"), DEFAULTS["sensor"]["threshold_cm"], 0),
             i2c_address=_parse_i2c_address(sensor_raw.get("i2c_address", DEFAULTS["sensor"]["i2c_address"])),
             touch_channel=_parse_int(sensor_raw.get("touch_channel"), DEFAULTS["sensor"]["touch_channel"], 0),
+            gamepad_device=str(sensor_raw.get("gamepad_device", DEFAULTS["sensor"]["gamepad_device"])).strip(),
             bounce_time_ms=_parse_int(sensor_raw.get("bounce_time_ms"), DEFAULTS["sensor"]["bounce_time_ms"], 0),
             min_lift_ms=_parse_int(sensor_raw.get("min_lift_ms"), DEFAULTS["sensor"]["min_lift_ms"], 0),
             min_replace_ms=_parse_int(sensor_raw.get("min_replace_ms"), DEFAULTS["sensor"]["min_replace_ms"], 0),
@@ -489,6 +569,21 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             enabled=_parse_bool(schedule_raw.get("enabled"), DEFAULTS["schedule"]["enabled"]),
             sleep_start=str(schedule_raw.get("sleep_start", DEFAULTS["schedule"]["sleep_start"])),
             sleep_end=str(schedule_raw.get("sleep_end", DEFAULTS["schedule"]["sleep_end"])),
+        ),
+        gamepad=GamepadConfig(
+            numbers={
+                name: _optional_int(gamepad_raw.get(name, DEFAULTS["gamepad"][name]))
+                for name in (*_GAMEPAD_BUTTONS, *sorted(_VALID_GAMEPAD_DIRECTIONS))
+            },
+            jobs={
+                job: _control_list(gamepad_raw.get(job, DEFAULTS["gamepad"][job]))
+                for job in _GAMEPAD_JOBS
+            },
+            audio={
+                direction: _resolve_path(str(gamepad_raw.get(f"audio_{direction}")).strip())
+                for direction in sorted(_VALID_GAMEPAD_DIRECTIONS)
+                if str(gamepad_raw.get(f"audio_{direction}", "")).strip()
+            },
         ),
         system=SystemConfig(
             mode=str(system_raw.get("mode", DEFAULTS["system"]["mode"])),
@@ -540,6 +635,18 @@ def validate(config: Config) -> list[str]:
         problems.append(
             f"sensor.sensor_combine must be one of {_VALID_SENSOR_COMBINE}; got {config.sensor.sensor_combine!r}"
         )
+
+    for job, controls in config.gamepad.jobs.items():
+        unknown = [c for c in controls if not _is_gamepad_control(c)]
+        if unknown:
+            problems.append(
+                f"gamepad.{job} names controls the pad has no idea about: {unknown}. "
+                f"Use {sorted(_GAMEPAD_CONTROLS | _VALID_GAMEPAD_DIRECTIONS)}, "
+                f"or a raw button as b<number>."
+            )
+    for direction, path in config.gamepad.audio.items():
+        if not path.exists():
+            problems.append(f"gamepad.audio_{direction} not found: {path}")
 
     types = [t.strip() for t in config.sensor.sensor_type.split("+")]
     unknown = [t for t in types if t not in _VALID_SENSOR_TYPES]

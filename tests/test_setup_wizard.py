@@ -461,5 +461,8 @@ def test_the_packaged_ini_points_at_the_sensor_it_ships_with() -> None:
     cfg = config_module.load(str(Path(__file__).resolve().parent.parent
                                  / "config" / "config.default.ini"))
 
-    assert cfg.sensor.sensor_type == "capacitive"
+    assert cfg.sensor.sensor_type == "gamepad"
+    assert cfg.sensor.gamepad_device == "auto", "the first pad plugged in"
+    # The pad is no longer the shipped sensor, but its address still has to be
+    # the one the wizard writes when somebody picks it.
     assert cfg.sensor.i2c_address == 0x5A, "the MPR121's address, not the ToF's"

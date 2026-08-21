@@ -267,13 +267,19 @@ restart_on_crash    = true
 
 ## Sensor wiring
 
-The shipped pad is one command away once it is wired: `motion-player-sensor
---fit` enables I²C, installs the MPR121 driver, and writes `capacitive` /
-`closed` / `0x5a` together. See COMMANDS.md for the header pins.
+The shipped sensor is a USB game controller. Hold **Start or Select** and the
+piece rewinds; **A or B** switches the picture to its kaleidoscope twin; the
+**four arrows** each choose a sound, once `[gamepad] audio_up` and friends name
+one. `motion-player-sensor --fit` finds the pad and writes `gamepad` / `closed`
+together, and `--probe` prints the name and number of whatever you press, which
+is how a pad that numbers its buttons differently gets corrected. See
+COMMANDS.md for the whole control map and the touch pad's header pins,
+and CONTROLLER.md for the visitor-facing instruction card.
 
 | sensor_type  | Hardware                       | Notes                                                |
 | ------------ | ------------------------------ | ---------------------------------------------------- |
-| `capacitive` | MPR121 touch pad over I²C      | Default; contact closes it, so `engaged_when=closed`. |
+| `gamepad`    | Any USB game controller        | Default; a held button closes it, so `engaged_when=closed`. |
+| `capacitive` | MPR121 touch pad over I²C      | Contact closes it, so `engaged_when=closed`.         |
 | `switch`     | Lever microswitch under stand  | Headphone weight closes it; wants `engaged_when=open`. |
 | `reed`       | Reed switch + magnet in earcup | Same logic as `switch`.                              |
 | `beam`       | IR beam-break across cradle    | Shield from gallery lighting.                        |

@@ -167,7 +167,8 @@ def apply_render_choice(text: str, renders: list[str], picks: list[int]) -> str:
 # inverts whichever it was not written for.
 SENSOR_CHOICES: list[tuple[str, str | None, bool, str | None, str]] = [
     # (value, engaged_when, sets_pin, i2c_address, label)
-    ("capacitive", "closed", False, "0x5a", "capacitive (touch pad, MPR121 over I2C) - what the show uses"),
+    ("gamepad", "closed", False, None, "gamepad (USB controller, hold a button) - what the show uses"),
+    ("capacitive", "closed", False, "0x5a", "capacitive (touch pad, MPR121 over I2C)"),
     ("gpio_raw", "closed", True, None, "gpio_raw (touch pad or any digital module on GPIO 4)"),
     ("switch", "open", True, None, "switch (headphone cradle on GPIO 4)"),
     ("mmwave", "open", True, None, "mmwave (24GHz radar presence pin)"),

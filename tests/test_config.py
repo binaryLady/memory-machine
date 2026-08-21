@@ -198,13 +198,19 @@ def test_a_nonsense_audio_mode_is_reported(tmp_path: Path) -> None:
     assert any("audio.audio_mode" in problem for problem in problems)
 
 
-def test_the_shipped_defaults_are_the_touch_pad_and_its_polarity(tmp_path: Path) -> None:
+def test_the_shipped_defaults_are_the_gamepad_and_its_polarity(tmp_path: Path) -> None:
     path = _write(tmp_path, "[system]\nlog_level = debug\n")
     cfg = config.load(path)
 
-    assert cfg.sensor.sensor_type == "capacitive"
-    # A pad is engaged when its contact closes; the polarity must ship with it.
+    assert cfg.sensor.sensor_type == "gamepad"
+    # A held button is engaged when its contact closes, the same way a touch pad
+    # is; the polarity must ship with the sensor.
     assert cfg.sensor.engaged_when == "closed"
+    assert cfg.sensor.gamepad_device == "auto"
+    # Start and Select hold the piece; A and B are the kaleidoscope, and the
+    # arrows choose the sound, so neither can also be the rewind.
+    assert cfg.gamepad.jobs["hold"] == ("start", "select")
+    assert cfg.gamepad.jobs["kaleidoscope"] == ("a", "b")
     assert cfg.audio.audio_sink == "USB"
 
 

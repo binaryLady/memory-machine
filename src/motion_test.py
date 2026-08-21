@@ -99,6 +99,29 @@ def _apply_schedule_transition(transition: str | None, state: StateMachine, vide
         LOGGER.info("Waking up")
 
 
+def _handle_control(event: str, video: VideoEngine, audio: AudioEngine,
+                    cfg: config.Config, journal: Any, status: Any) -> bool:
+    """Act on the pad's one-shot controls, or say it was not one.
+
+    Choosing a sound or switching the picture is not a state the piece is in,
+    so these never reach the state machine — they change what is playing and
+    leave the rewind exactly where the visitor had it.
+    """
+    if event == "kaleidoscope":
+        showing = video.toggle_kaleidoscope()
+        status.set_extra("kaleidoscope", showing)
+        journal.record("kaleidoscope", showing=showing)
+        return True
+    if event.startswith("audio_"):
+        path = cfg.gamepad.audio.get(event[len("audio_"):])
+        if path is not None and audio.switch_to(path):
+            video.set_audio_duration(audio.duration_s)
+            status.set_extra("audio_file", path.name)
+            journal.record("audio_chosen", file=path.name)
+        return True
+    return False
+
+
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int,
                heartbeat: Heartbeat, journal: Journal) -> int:
@@ -155,6 +178,8 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                     LOGGER.debug("Asleep; discarding sensor event %s", event)
                     continue
                 LOGGER.debug("Event from queue: %s %s %s", event, ts, source)
+                if _handle_control(event, video, audio, cfg, journal, status):
+                    continue
                 state.handle(event)
                 status.set_state(state.state)
                 telemetry.event(
@@ -291,7 +316,7 @@ def run(argv: list[str] | None = None) -> int:
 
         video = VideoEngine(cfg)
         audio = AudioEngine(cfg)
-        sensor = make_sensor(cfg.sensor)
+        sensor = make_sensor(cfg.sensor, cfg.gamepad)
         state = StateMachine(
             cfg,
             AlwaysOnAudio(audio) if cfg.audio.audio_mode == "always" else audio,

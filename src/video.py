@@ -48,6 +48,10 @@ class VideoEngine:
         self._video_path = Path(config.media.video_file)
         self._reverse_path = Path(config.media.reverse_file)
         self._cuts = tuple(config.media.cuts)
+        self._kaleidoscope_path = config.media.kaleidoscope_file
+        self._kaleidoscope_cuts = tuple(config.media.kaleidoscope_cuts)
+        self._plain_path: Path | None = None
+        self._showing_kaleidoscope = False
         self._title = "memory-machine"
         self._cap: Any = None
         self._reverse_cap: Any = None
@@ -87,6 +91,8 @@ class VideoEngine:
 
         self._display_mode = display.apply_mode(self._config.display, self._config.display_mode)
         self._select_variant()
+        self._select_kaleidoscope()
+        self._plain_path = self._video_path
         self._load()
         self._create_window()
 
@@ -143,6 +149,88 @@ class VideoEngine:
         self._video_path = Path(chosen)
         self._reverse_path = Path(reverse_name(chosen))
         LOGGER.info("Screen is %dx%d; using the closest cut %s", width, height, self._video_path.name)
+
+    def _select_kaleidoscope(self) -> None:
+        """Pick the kaleidoscope twin that matches the screen, as the cuts do.
+
+        Same shape matching, run over the parallel list: a portrait screen gets
+        the portrait kaleidoscope, not the square one.
+        """
+        if not self._kaleidoscope_cuts:
+            return
+        size = display.output_resolution(self._config.display, self._config.display_mode)
+        if size is None:
+            return
+
+        candidates: list[tuple[str, int, int]] = []
+        for cut in self._kaleidoscope_cuts:
+            if not cut.exists() or not Path(reverse_name(str(cut))).exists():
+                LOGGER.error("Skipping kaleidoscope cut %s: it or its reversed copy is missing",
+                             cut.name)
+                continue
+            probed = self._probe_size(cut)
+            if probed is None:
+                continue
+            candidates.append((str(cut), probed[0], probed[1]))
+        if not candidates:
+            return
+
+        chosen = choose_cut(size[0], size[1], candidates)
+        if chosen is not None:
+            self._kaleidoscope_path = Path(chosen)
+            LOGGER.info("Kaleidoscope twin: %s", self._kaleidoscope_path.name)
+
+    @property
+    def showing_kaleidoscope(self) -> bool:
+        return self._showing_kaleidoscope
+
+    def toggle_kaleidoscope(self) -> bool:
+        """Switch the picture between the plain render and its kaleidoscope twin.
+
+        The twin is the same footage at the same length, so the visitor keeps
+        their place: a rewind three-quarters of the way back carries on from
+        three-quarters of the way back, in the other render.
+        """
+        if self._kaleidoscope_path is None or self._plain_path is None:
+            LOGGER.info("No kaleidoscope twin configured; nothing to switch to")
+            return self._showing_kaleidoscope
+        wanted = self._plain_path if self._showing_kaleidoscope else self._kaleidoscope_path
+        if not wanted.exists():
+            LOGGER.error("Kaleidoscope twin missing: %s", wanted)
+            return self._showing_kaleidoscope
+        self._showing_kaleidoscope = not self._showing_kaleidoscope
+        self._swap_clip(wanted)
+        return self._showing_kaleidoscope
+
+    def _swap_clip(self, path: Path) -> None:
+        """Reopen on another render of the same piece, holding mode and place."""
+        mode = self._mode
+        index = self._current_index
+        for cap in (self._cap, self._reverse_cap):
+            if cap is not None:
+                cap.release()
+        self._cap = None
+        self._reverse_cap = None
+        self._video_path = path
+        self._reverse_path = Path(reverse_name(str(path)))
+        self._plan = None
+        self._plan_for = None
+        self._load()
+        self.set_mode(mode)
+        # set_mode starts the mode from its own end; walk back to where the
+        # visitor actually was.
+        if mode in {"REVERSE", "FORWARD"} and self._frame_count:
+            self._current_index = min(index, float(max(self._frame_count - 1, 0)))
+            if mode == "REVERSE":
+                cap = self._reverse_cap
+                # The reverse clip runs the other way: the same moment of the
+                # piece is that far in from its own start.
+                target = int((self._frame_count - 1) - self._current_index)
+            else:
+                cap = self._cap
+                target = int(self._current_index)
+            self._advance_to(cap, target)
+            self._show(self._last_frame)
 
     def _open(self, path: Path, label: str) -> Any:
         if not path.exists():
