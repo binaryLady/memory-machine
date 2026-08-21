@@ -13,7 +13,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-setup` | `--set section.key=value` `--save-setup NAME` `--load-setup NAME` `--list-setups` | guided configuration: setups menu (save/load/duplicate a named configuration), screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
@@ -351,6 +351,18 @@ which builds its reverse at the same time and removes per-frame scaling:
 ```bash
 motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 800x1280
 ```
+
+**A master with baked-in bars poisons every render** — an editor-canvas
+export carries its letterbox into the pixels, and `fill` faithfully keeps any
+bar that survives its crop. `--crop auto` measures the true picture with
+cropdetect and trims exactly the bars, before rotation, effects, or scaling:
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1280x800 --mode fill --crop auto --force
+```
+
+Explicit `--crop W:H:X:Y` (ffmpeg's crop order) takes framing into your own
+hands. The clean long-term fix is still an export at the art's true frame.
 
 **Preparing renames the file, and the config must follow.** That command writes
 `piece_portrait.800x1280.mp4` (and its reverse) — it does not touch

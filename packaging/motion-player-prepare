@@ -34,6 +34,10 @@ motion-player-prepare — render the piece at the screen's resolution.
              happens once here, not per frame at playback; give --size as
              the panel's native (unrotated) mode, e.g. --size 1280x800
              --rotate cw for a 1280x800 panel standing on its side
+  --crop     auto, or W:H:X:Y — trim the source before anything else.
+             auto measures baked-in black bars (an editor-canvas export)
+             with cropdetect and removes exactly them; give explicit
+             ffmpeg crop values to take framing into your own hands
   --fx       double-h | mirror-h | mirror-v | kaleidoscope — bake a seamless
              symmetry into the render. double-h sets the whole frame beside
              its own reflection (a ~1:2 portrait doubled becomes a square;
@@ -53,12 +57,14 @@ USAGE
 APPLY=ask
 ROTATE=""
 FX=""
+CROP=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --rotate) ROTATE="${2:-}"; shift 2 ;;
+        --crop) CROP="${2:-}"; shift 2 ;;
         --fx) FX="${2:-}"; shift 2 ;;
         --apply) APPLY=yes; shift ;;
         --no-apply) APPLY=no; shift ;;
@@ -71,6 +77,16 @@ done
 case "$ROTATE" in
     ""|cw|ccw) ;;
     *) echo "--rotate must be cw or ccw; got '$ROTATE'" >&2; exit 2 ;;
+esac
+
+case "$CROP" in
+    ""|auto) ;;
+    *)
+        if ! printf '%s' "$CROP" | grep -qE '^[0-9]+:[0-9]+:[0-9]+:[0-9]+$'; then
+            echo "--crop takes auto or W:H:X:Y; got '$CROP'" >&2
+            exit 2
+        fi
+        ;;
 esac
 
 case "$FX" in
@@ -112,6 +128,18 @@ fi
 
 WIDTH="${SIZE%x*}"
 HEIGHT="${SIZE#*x}"
+
+if [ "$CROP" = "auto" ]; then
+    # Measure the baked bars rather than guessing: cropdetect over the first
+    # seconds finds the true content rectangle inside a canvas export.
+    CROP="$(ffmpeg -i "$SRC" -vf cropdetect=24:2:0 -frames:v 120 -f null - 2>&1 \
+        | grep -o 'crop=[0-9:]*' | tail -n1 | cut -d= -f2)"
+    if [ -z "$CROP" ]; then
+        echo "cropdetect found nothing to measure; is the source readable?" >&2
+        exit 1
+    fi
+    echo "Auto-crop measured: $CROP"
+fi
 
 src_dimension() {
     ffprobe -v error -select_streams v:0 -show_entries "stream=$1" \
@@ -184,12 +212,18 @@ case "$FX" in
 esac
 
 # The turn happens here, once, rather than in a compositor transform at
-# playback. Prefixed last so it leads the whole chain: rotation before any
-# effect or scaling, and --size stays the panel's native mode.
+# playback. Prefixed after fx so it leads rotation, effects and scaling, and
+# --size stays the panel's native mode.
 if [ -n "$ROTATE" ]; then
     T=1
     [ "$ROTATE" = "ccw" ] && T=2
     VF="transpose=${T},${VF}"
+fi
+
+# The trim leads the whole chain: baked bars must be gone before rotation,
+# effects, or scaling can be measured against the true picture.
+if [ -n "$CROP" ]; then
+    VF="crop=${CROP},${VF}"
 fi
 
 STEM="${SRC%.*}"
