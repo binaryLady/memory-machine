@@ -2,8 +2,9 @@
 
 ## Normal operation
 
-1. Plug in the Raspberry Pi power.
-2. Wait about 30 seconds. The sound begins on its own and plays continuously.
+1. Plug in the Raspberry Pi power. Nothing else — no login, no button, no
+   internet needed.
+2. Wait about a minute. The sound begins on its own and plays continuously.
    The screen shows a still frame from the piece.
 3. Press and hold **Start** or **Select** on the controller. The image plays in
    reverse for as long as the button is held.

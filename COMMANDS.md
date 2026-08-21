@@ -506,6 +506,31 @@ figures travel, the log stays on disk. In both modes log writes go through a
 queue to a background thread, so a slow SD card can never stall a frame. The
 setup wizard sets the mode with its gallery/test presets.
 
+### Gallery mode arms the boot
+
+Choosing **gallery** in the wizard is a promise: plug the piece in and it comes
+up on its own — no network, no login, nobody at a keyboard, and the controller
+is for the interaction, never for starting it. Beyond the config edits (fullscreen,
+production mode, soak timer cleared, the attached screen's mode pinned as
+`display_mode`) the wizard arms the machine itself and reports each step:
+
+- the screen never blanks (`raspi-config do_blanking`)
+- the desktop logs itself in at boot (`do_boot_behaviour B4`)
+- the service may start before anyone logs in (`loginctl enable-linger`)
+- the service is enabled for every boot (`systemctl --user enable`)
+- the nightly update timer is switched off — there is nothing to fetch from
+
+Every step is safe to repeat. A `!!` line names the step that needs doing by
+hand. Then the only test that counts — the dress rehearsal:
+
+```bash
+sudo reboot
+```
+
+Walk away, come back in a minute, touch nothing: the piece should be on screen
+with the panels lit. Then pull the power and plug it back in, which is exactly
+what the gallery does every morning.
+
 ---
 
 ## The heartbeat panel

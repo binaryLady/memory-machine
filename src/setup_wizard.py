@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 CONFIG_PATH = Path("/etc/motion-player/config.ini")
 PACKAGED_DEFAULT = Path("/opt/motion-player/config.default.ini")
@@ -171,24 +172,68 @@ def parse_set_args(args: list[str]) -> list[tuple[str, str, str]]:
     return pairs
 
 
-def apply_run_mode(text: str, gallery: bool) -> str:
+def apply_run_mode(text: str, gallery: bool, screen_mode: str | None = None) -> str:
     """Gallery vs test, as config edits.
 
     Both modes render identically — test mode changes observability, never the
     picture: the piece must look exactly as it will in the show, or the test
     tests nothing. Asserting fullscreen here also repairs configs written back
     when test mode forced a window.
+
+    Gallery mode also pins the attached screen's mode (WxH, as detected) so a
+    panel that is slow to wake after a power cut cannot leave the output
+    negotiated to something else.
     """
     text = set_ini_value(text, "playback", "fullscreen", "true")
     if gallery:
         text = set_ini_value(text, "system", "mode", "production")
         # Always reset: a forgotten soak value must never stop the show.
         text = set_ini_value(text, "system", "exit_after_s", "0")
+        if screen_mode and re.fullmatch(r"\d+x\d+", screen_mode):
+            text = set_ini_value(text, "playback", "display_mode", f"{screen_mode}@60")
     else:
         text = set_ini_value(text, "system", "mode", "test")
         text = set_ini_value(text, "sensor", "sensor_type", "keyboard")
         text = set_ini_value(text, "playback", "idle_mode", "loop_forward")
     return text
+
+
+# Gallery mode is a promise: plug the piece in and it comes up on its own, with
+# no network, no login and nobody at a keyboard. These are the machine-level
+# settings that promise rests on, beyond the config file.
+def show_readiness_steps(operator: str, uid: int) -> list[tuple[str, list[str]]]:
+    """(what it guarantees, command) for each step that arms an unattended boot."""
+    as_operator = ["sudo", "-u", operator, "env", f"XDG_RUNTIME_DIR=/run/user/{uid}"]
+    return [
+        ("the screen never blanks", ["raspi-config", "nonint", "do_blanking", "1"]),
+        ("the desktop logs itself in at boot", ["raspi-config", "nonint", "do_boot_behaviour", "B4"]),
+        ("the piece's service may start before anyone logs in",
+         ["loginctl", "enable-linger", operator]),
+        ("the piece starts at every boot",
+         [*as_operator, "systemctl", "--user", "enable", "motion-player.service"]),
+        ("no nightly update is attempted (there is no network to fetch from)",
+         [*as_operator, "systemctl", "--user", "disable", "--now", "motion-player-update.timer"]),
+    ]
+
+
+def arm_for_the_show(run: Any = subprocess.run) -> list[str]:
+    """Run the readiness steps and say, one line each, how each one went."""
+    operator = os.environ.get("SUDO_USER") or os.environ.get("USER") or "pi"
+    try:
+        uid = pwd.getpwnam(operator).pw_uid
+    except KeyError:
+        return [f"  ? could not find user {operator}; arm the boot by hand (see COMMANDS.md)"]
+    report = []
+    for promise, command in show_readiness_steps(operator, uid):
+        try:
+            result = run(command, capture_output=True, text=True, timeout=30, check=False)
+            ok = result.returncode == 0
+            detail = "" if ok else (result.stderr or result.stdout).strip().splitlines()[-1:]
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            ok, detail = False, [str(exc)]
+        mark = "ok" if ok else "!!"
+        report.append(f"  {mark} {promise}" + (f" — {detail[0]}" if detail else ""))
+    return report
 
 
 def discover_renders(media_dir: Path) -> list[str]:
@@ -661,8 +706,16 @@ def run_questions(text: str) -> str:
          "test (verbose logs, spacebar triggers, loops)"],
     )
     if mode:
-        text = apply_run_mode(text, gallery=mode.startswith("gallery"))
-        if not mode.startswith("gallery"):
+        gallery = mode.startswith("gallery")
+        screen_mode = screens[0][1] if screens and screens[0][1] != "unknown" else None
+        text = apply_run_mode(text, gallery=gallery, screen_mode=screen_mode)
+        if gallery:
+            print("\nArming the piece to come up on its own at every power-on:")
+            for line in arm_for_the_show():
+                print(line)
+            print("Dress rehearsal: pull the power, plug it back in, touch nothing —"
+                  " the piece should be on screen within a minute.")
+        else:
             soak = input("\nStop automatically after N seconds? [Enter = run until quit]: ").strip()
             if soak.isdigit() and int(soak) > 0:
                 text = set_ini_value(text, "system", "exit_after_s", soak)

@@ -584,3 +584,59 @@ def test_a_typed_address_wins_and_garbage_is_refused(monkeypatch) -> None:
     text = _ask_lcd_address("[lcd2]\n", "lcd2")
     assert get_ini_value(text, "lcd2", "i2c_address") == "0x3f"
     assert any("keeping 0x3f" in line for line in said)
+
+
+def test_gallery_mode_pins_the_detected_screen_mode() -> None:
+    from setup_wizard import apply_run_mode
+
+    result = apply_run_mode(SAMPLE, gallery=True, screen_mode="1280x800")
+
+    assert "display_mode" in result and "1280x800@60" in result
+
+
+def test_gallery_mode_leaves_display_mode_alone_without_a_screen() -> None:
+    from setup_wizard import apply_run_mode
+
+    for unknown in (None, "unknown", ""):
+        assert "1280x800@60" not in apply_run_mode(SAMPLE, gallery=True, screen_mode=unknown)
+
+
+def test_test_mode_never_pins_the_screen() -> None:
+    from setup_wizard import apply_run_mode
+
+    assert "@60" not in apply_run_mode(SAMPLE, gallery=False, screen_mode="1280x800")
+
+
+def test_the_readiness_steps_cover_every_promise_of_an_unattended_boot() -> None:
+    from setup_wizard import show_readiness_steps
+
+    steps = show_readiness_steps("binarylady", 1000)
+    commands = [" ".join(cmd) for _promise, cmd in steps]
+
+    assert any("do_blanking 1" in c for c in commands), "screen must never blank"
+    assert any("do_boot_behaviour B4" in c for c in commands), "desktop autologin"
+    assert any("enable-linger binarylady" in c for c in commands)
+    assert any("enable motion-player.service" in c and "XDG_RUNTIME_DIR=/run/user/1000" in c
+               for c in commands), "the service is enabled as the operator, not root"
+    assert any("disable --now motion-player-update.timer" in c for c in commands)
+
+
+def test_arming_reports_each_step_and_survives_a_failure(monkeypatch) -> None:
+    from setup_wizard import arm_for_the_show
+
+    monkeypatch.setenv("SUDO_USER", "")
+    import pwd
+    import os
+    me = pwd.getpwuid(os.getuid()).pw_name
+    monkeypatch.setenv("USER", me)
+
+    def fake_run(command, **_kwargs):
+        failed = "do_boot_behaviour" in command
+        return SimpleNamespace(returncode=1 if failed else 0,
+                               stdout="", stderr="raspi-config: no such option\n" if failed else "")
+
+    report = arm_for_the_show(run=fake_run)
+
+    assert len(report) == 5
+    assert sum(line.startswith("  ok") for line in report) == 4
+    assert any(line.startswith("  !!") and "no such option" in line for line in report)
