@@ -38,6 +38,12 @@ motion-player-prepare — render the piece at the screen's resolution.
              auto measures baked-in black bars (an editor-canvas export)
              with cropdetect and removes exactly them; give explicit
              ffmpeg crop values to take framing into your own hands
+  --trim     auto, or HEAD:TAIL seconds — cut the fades off both ends so the
+             idle loop never dips to black. auto measures the black frames
+             at the head and tail with blackdetect and removes exactly
+             them; HEAD:TAIL (e.g. 1.5:2) cuts that many seconds from each
+             end, for a fade that ramps rather than sits at black. The
+             reverse and any --fx twin inherit the same cut
   --fx       double-h | mirror-h | mirror-v | kaleidoscope — bake a seamless
              symmetry into the render. double-h sets the whole frame beside
              its own reflection (a ~1:2 portrait doubled becomes a square;
@@ -58,6 +64,7 @@ APPLY=ask
 ROTATE=""
 FX=""
 CROP=""
+TRIM=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --size) SIZE="${2:-}"; shift 2 ;;
@@ -65,6 +72,7 @@ while [ $# -gt 0 ]; do
         --mode) MODE="${2:-}"; shift 2 ;;
         --rotate) ROTATE="${2:-}"; shift 2 ;;
         --crop) CROP="${2:-}"; shift 2 ;;
+        --trim) TRIM="${2:-}"; shift 2 ;;
         --fx) FX="${2:-}"; shift 2 ;;
         --apply) APPLY=yes; shift ;;
         --no-apply) APPLY=no; shift ;;
@@ -84,6 +92,16 @@ case "$CROP" in
     *)
         if ! printf '%s' "$CROP" | grep -qE '^[0-9]+:[0-9]+:[0-9]+:[0-9]+$'; then
             echo "--crop takes auto or W:H:X:Y; got '$CROP'" >&2
+            exit 2
+        fi
+        ;;
+esac
+
+case "$TRIM" in
+    ""|auto) ;;
+    *)
+        if ! printf '%s' "$TRIM" | grep -qE '^[0-9]+(\.[0-9]+)?:[0-9]+(\.[0-9]+)?$'; then
+            echo "--trim takes auto or HEAD:TAIL seconds; got '$TRIM'" >&2
             exit 2
         fi
         ;;
@@ -220,10 +238,33 @@ if [ -n "$ROTATE" ]; then
     VF="transpose=${T},${VF}"
 fi
 
-# The trim leads the whole chain: baked bars must be gone before rotation,
+# The crop leads the chain: baked bars must be gone before rotation,
 # effects, or scaling can be measured against the true picture.
 if [ -n "$CROP" ]; then
     VF="crop=${CROP},${VF}"
+fi
+
+# And the trim leads the crop: a loop that fades to black at either end dips
+# every time it comes round, so the fades are cut before anything else.
+if [ -n "$TRIM" ]; then
+    DURATION="$(ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "$SRC")"
+    if [ "$TRIM" = "auto" ]; then
+        BLACK="$(ffmpeg -nostdin -i "$SRC" -an -vf "blackdetect=d=0.04:pix_th=0.12" -f null - 2>&1 \
+            | grep -o 'black_start:[0-9.]* black_end:[0-9.]*')"
+        TRIM_START="$(printf '%s\n' "$BLACK" | awk -F'[: ]' '$2 <= 0.05 {print $4; exit}')"
+        TRIM_END="$(printf '%s\n' "$BLACK" | awk -F'[: ]' -v d="$DURATION" '$4 >= d - 0.05 {print $2}' | tail -n1)"
+        TRIM_START="${TRIM_START:-0}"
+        TRIM_END="${TRIM_END:-$DURATION}"
+        echo "Auto-trim measured: black head ${TRIM_START}s, black tail from ${TRIM_END}s of ${DURATION}s"
+    else
+        TRIM_START="${TRIM%:*}"
+        TRIM_END="$(awk -v d="$DURATION" -v t="${TRIM#*:}" 'BEGIN {printf "%.3f", d - t}')"
+    fi
+    if awk -v a="$TRIM_START" -v b="$TRIM_END" 'BEGIN {exit !(b - a < 1)}'; then
+        echo "--trim would leave less than a second of picture (${TRIM_START}s to ${TRIM_END}s)" >&2
+        exit 1
+    fi
+    VF="trim=start=${TRIM_START}:end=${TRIM_END},setpts=PTS-STARTPTS,${VF}"
 fi
 
 STEM="${SRC%.*}"
