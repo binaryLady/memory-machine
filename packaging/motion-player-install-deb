@@ -27,4 +27,8 @@ if [ -z "$DEB" ]; then
 fi
 
 echo "Installing $DEB"
-exec apt-get install --reinstall -y --allow-downgrades "$DEB"
+# The operator's /etc config is the artwork's state; the package's copy is a
+# template. Never ask — and never hang an unattended update on a conffile
+# prompt nobody is present to answer.
+exec apt-get install --reinstall -y --allow-downgrades \
+    -o Dpkg::Options::=--force-confold "$DEB"
