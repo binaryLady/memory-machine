@@ -355,8 +355,39 @@ def test_the_reward_flashes_the_whole_sky_with_the_beat() -> None:
     shown_full, hidden_full = lcd.show_stars("radiant", full=True)
     shown_relax, hidden_relax = lcd.show_stars("radiant", full=False)
 
-    assert set(shown_full) == set(lcd.ALL_SHOW_STARS) and hidden_full == ()
-    assert shown_relax == () and set(hidden_relax) == set(lcd.ALL_SHOW_STARS)
+    assert set(shown_full) == set(lcd.ALL_INTER_STARS) and hidden_full == ()
+    assert shown_relax == () and set(hidden_relax) == set(lcd.ALL_INTER_STARS)
+
+
+def test_interacting_takes_the_panel_while_background_keeps_the_readout() -> None:
+    assert lcd.show_view("lively") == "interacting"
+    assert lcd.show_view("radiant") == "interacting"
+    assert lcd.show_view("calm") == "background"
+    assert lcd.show_view("hello") == "background"
+    assert lcd.show_view("dark") == "background"
+
+
+def test_interacting_rows_are_title_heart_space_and_word() -> None:
+    rows = lcd.interacting_rows("Memory<>Machine", "See me")
+
+    assert rows[0].strip() == "Memory<>Machine"
+    assert rows[1].strip() == "" and rows[2].strip() == ""
+    assert rows[3].strip() == "See me"
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+
+
+def test_interacting_stars_avoid_title_heart_and_word() -> None:
+    big = lcd.parse_icon_art(
+        "\n".join(["#" * 10] * 16) + "\n---\n" + "\n".join(["." * 10] * 16)
+    )
+    row0, col0 = lcd.icon_origin(big)
+    icon_cells = {(row0 + r, col0 + c) for r in range(big.rows) for c in range(big.cols)}
+    text_cells = {(0, c) for c in range(1, 19)} | {(3, c) for c in range(1, 19)}
+
+    for star in lcd.ALL_INTER_STARS:
+        assert star not in icon_cells, f"star {star} collides with the big heart"
+        assert star not in text_cells, f"star {star} collides with title or word"
+        assert 0 <= star[0] < lcd.ROWS and 0 <= star[1] < lcd.COLUMNS
 
 
 def test_the_reward_speaks_its_own_word() -> None:

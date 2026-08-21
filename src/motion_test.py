@@ -18,6 +18,7 @@ import logging_setup
 import status as status_module
 from audio import AudioEngine
 import sysinfo
+from journal import Journal
 from lcd import Heartbeat
 from schedule import SleepScheduler
 from sensors import NullSensor, make_sensor, start_sensor
@@ -73,7 +74,8 @@ def _preflight(cfg: config.Config, video: VideoEngine, audio: AudioEngine) -> li
 
 
 def _apply_schedule_transition(transition: str | None, state: StateMachine, video: VideoEngine,
-                               audio: AudioEngine, telemetry: Telemetry, cfg: config.Config) -> None:
+                               audio: AudioEngine, telemetry: Telemetry, cfg: config.Config,
+                               journal: Journal) -> None:
     """Put the piece to bed or wake it, from a scheduler flip."""
     if transition == "sleep":
         if state.state == "ENGAGED":
@@ -85,17 +87,19 @@ def _apply_schedule_transition(transition: str | None, state: StateMachine, vide
             audio.fade_out(cfg.audio.fade_out_ms)
         video.set_mode("BLACK")
         telemetry.event("sleep_start")
+        journal.record("sleep")
         LOGGER.info("Going to sleep for the night")
     elif transition == "wake":
         video.set_mode("IDLE")
         state.mark_audio_playing()
         telemetry.event("sleep_end")
+        journal.record("wake")
         LOGGER.info("Waking up")
 
 
 def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngine, state: StateMachine,
                status: status_module.StatusWriter, telemetry: Telemetry, lock_fd: int,
-               heartbeat: Heartbeat) -> int:
+               heartbeat: Heartbeat, journal: Journal) -> int:
     events: queue.Queue = queue.Queue()
     started = start_sensor(sensor, events)
     degraded = started is not sensor
@@ -133,6 +137,8 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
     next_housekeeping = 0.0
     cpu_previous: tuple[int, int] | None = None
 
+    last_panel_state = ""
+    journal.record("startup", version=sysinfo.read_version())
     LOGGER.info("Main loop started; state=%s", state.state)
     while True:
         # Drain sensor events (from GPIO callbacks) without blocking.
@@ -151,6 +157,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                     state=state.state,
                     monotonic_ts=ts,
                 )
+                journal.record(event, source=source)
         except queue.Empty:
             pass
 
@@ -172,7 +179,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         now = time.monotonic()
         state.tick(now)
 
-        _apply_schedule_transition(scheduler.poll(now), state, video, audio, telemetry, cfg)
+        _apply_schedule_transition(scheduler.poll(now), state, video, audio, telemetry, cfg, journal)
         display_state = "SLEEP" if scheduler.asleep else state.state
         status.set_state(display_state)
         # The panel narrates the drama, not just the sensor: staying through
@@ -181,6 +188,9 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         panel_state = display_state
         if display_state == "ENGAGED" and video.mode == "FORWARD":
             panel_state = "REWARD"
+        if panel_state == "REWARD" and last_panel_state != "REWARD":
+            journal.record("reward")
+        last_panel_state = panel_state
         heartbeat.set_state(panel_state)
 
         # Video at-start detection.
@@ -279,6 +289,7 @@ def run(argv: list[str] | None = None) -> int:
         state = StateMachine(cfg, audio, video, status)
         heartbeat = Heartbeat(cfg, status)
         heartbeat.start()
+        journal = Journal(state_dir / "journal")
         log_path = state_dir / "motion-player.log"
         telemetry = Telemetry(cfg, status, log_path)
 
@@ -287,10 +298,11 @@ def run(argv: list[str] | None = None) -> int:
             LOGGER.warning("Preflight: %s", problem)
             status.set_last_error(problem)
 
-        result = _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd, heartbeat)
+        result = _main_loop(cfg, sensor, video, audio, state, status, telemetry, lock_fd, heartbeat, journal)
         # A clean stop is news too: remote monitoring cannot otherwise tell a
         # deliberate quit from the start of a crash loop.
         telemetry.event("shutdown", reason="requested", exit_code=result)
+        journal.record("shutdown")
         return result
     except Exception as exc:  # noqa: BLE001
         LOGGER.critical("Unhandled exception: %s\n%s", exc, traceback.format_exc())
