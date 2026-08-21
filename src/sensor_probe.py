@@ -475,17 +475,18 @@ def _fit_driver() -> int:
     return 1
 
 
-def _fit_config(missing: list[tuple[str, str]], sensor_type: str) -> int:
+def _fit_config(missing: list[tuple[str, str]], sensor_type: str,
+                target: str, target_word: str) -> int:
     """Hand the pad's settings to the wizard, which validates and restarts.
 
     A sensor_type that is neither the pad nor empty was somebody's decision, so
     it is asked about rather than overwritten — except with nobody at the
     keyboard, where replacing it is the whole point of the command.
     """
-    if sensor_type not in {"capacitive", ""}:
-        print(f"  the config says sensor_type = {sensor_type}, not the touch pad")
+    if sensor_type not in {target, ""}:
+        print(f"  the config says sensor_type = {sensor_type}, not the {target_word}")
         if sys.stdin.isatty():
-            if input("  Change it to capacitive? [y/N]: ").strip().lower() != "y":
+            if input(f"  Change it to {target}? [y/N]: ").strip().lower() != "y":
                 print("  left alone; nothing changed")
                 return 1
         else:
@@ -517,7 +518,8 @@ def _fit_touch(cfg: Any) -> int:
             code = _fit_driver()
         else:
             print("Writing the touch pad's config")
-            code = _fit_config(missing, current["sensor.sensor_type"])
+            code = _fit_config(missing, current["sensor.sensor_type"],
+                               "capacitive", "touch pad")
         if code == _REBOOT_FIRST:
             return 0
         if code:
@@ -559,7 +561,8 @@ def _fit_gamepad(cfg: Any) -> int:
 
     if missing:
         print("\nWriting the gamepad's config")
-        code = _fit_config(missing, current["sensor.sensor_type"])
+        code = _fit_config(missing, current["sensor.sensor_type"],
+                           "gamepad", "gamepad")
         if code:
             return code
     else:
