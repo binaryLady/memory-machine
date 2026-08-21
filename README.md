@@ -267,6 +267,10 @@ restart_on_crash    = true
 
 ## Sensor wiring
 
+The shipped pad is one command away once it is wired: `motion-player-sensor
+--fit` enables I²C, installs the MPR121 driver, and writes `capacitive` /
+`closed` / `0x5a` together. See COMMANDS.md for the header pins.
+
 | sensor_type  | Hardware                       | Notes                                                |
 | ------------ | ------------------------------ | ---------------------------------------------------- |
 | `capacitive` | MPR121 touch pad over I²C      | Default; contact closes it, so `engaged_when=closed`. |

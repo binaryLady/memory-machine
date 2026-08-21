@@ -11,8 +11,10 @@ tested without a Pi, a GPIO pin, or an I2C bus.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -284,13 +286,183 @@ def probe() -> int:
     return 0
 
 
+# --- fitting the pad ---------------------------------------------------------
+
+# Blinka and the MPR121 driver. Neither is packaged for apt, so the deb cannot
+# depend on them, and without them a correctly wired pad still does nothing:
+# the backend fails to initialise and the engine falls back to the keyboard.
+_DRIVER_MODULES = ("board", "busio", "adafruit_mpr121")
+_DRIVER_PACKAGE = "adafruit-circuitpython-mpr121"
+_I2C_DEVICE = Path("/dev/i2c-1")
+# The bus only appears after a reboot, so a fit that enables it stops there.
+_REBOOT_FIRST = 2
+
+# What the shipped pad wants in the config. i2c_address is one key read by
+# whichever backend sensor_type names — the MPR121 at 0x5a, the VL53L0X at
+# 0x29 — so it has to move with the sensor or the pad is looked for at the
+# range-finder's address.
+TOUCH_SETTINGS: tuple[tuple[str, str], ...] = (
+    ("sensor.sensor_type", "capacitive"),
+    ("sensor.engaged_when", "closed"),
+    ("sensor.i2c_address", "0x5a"),
+    ("sensor.touch_channel", "0"),
+)
+
+
+def touch_settings_missing(current: dict[str, str]) -> list[tuple[str, str]]:
+    """The settings the config does not already carry, in file order."""
+    return [(key, value) for key, value in TOUCH_SETTINGS if current.get(key) != value]
+
+
+def fit_plan(i2c_ready: bool, driver_ready: bool, tools_ready: bool,
+             config_ready: bool) -> list[str]:
+    """The work left between a wired pad and one the engine can read.
+
+    In order, and each step drops out once the machine already has it — so a
+    second --fit run does nothing, and a run after a reboot picks up where the
+    first one stopped.
+    """
+    steps = []
+    if not i2c_ready:
+        steps.append("i2c")
+    if not tools_ready:
+        steps.append("tools")
+    if not driver_ready:
+        steps.append("driver")
+    if not config_ready:
+        steps.append("config")
+    return steps
+
+
+def _current_touch_settings(cfg: Any) -> dict[str, str]:
+    address = cfg.sensor.i2c_address
+    return {
+        "sensor.sensor_type": cfg.sensor.sensor_type,
+        "sensor.engaged_when": cfg.sensor.engaged_when,
+        "sensor.i2c_address": f"0x{address:02x}" if address else "",
+        "sensor.touch_channel": str(cfg.sensor.touch_channel),
+    }
+
+
+def _driver_ready() -> bool:
+    """Whether the driver imports would resolve, without paying for them."""
+    try:
+        return all(importlib.util.find_spec(module) is not None for module in _DRIVER_MODULES)
+    except (ImportError, ValueError):
+        return False
+
+
+def _sudo(cmd: list[str]) -> list[str]:
+    return cmd if os.geteuid() == 0 else ["sudo", *cmd]
+
+
+def _run(cmd: list[str]) -> bool:
+    print(f"  $ {' '.join(cmd)}")
+    return subprocess.run(cmd, check=False).returncode == 0
+
+
+def _fit_i2c() -> int:
+    """Turn the bus on. Returns 2 when the machine has to reboot first."""
+    if not shutil.which("raspi-config"):
+        print(f"  no {_I2C_DEVICE} and no raspi-config to enable it — turn I2C on by hand")
+        return 1
+    if not _run(_sudo(["raspi-config", "nonint", "do_i2c", "0"])):
+        print("  could not enable I2C")
+        return 1
+    print("  I2C enabled. Reboot, then run motion-player-sensor --fit again.")
+    return _REBOOT_FIRST
+
+
+def _fit_tools() -> int:
+    return 0 if _run(_sudo(["apt-get", "install", "-y", "i2c-tools"])) else 1
+
+
+def _fit_driver() -> int:
+    """Install Blinka and the MPR121 driver into the system python.
+
+    The engine runs under /usr/bin/python3, so the driver has to land there
+    too; a venv the service never sources would leave the pad dead.
+    """
+    if _run(_sudo(["pip3", "install", "--break-system-packages", _DRIVER_PACKAGE])):
+        return 0
+    # A pip too old to know that flag rejects the whole command; the plain form
+    # is what works there.
+    if _run(_sudo(["pip3", "install", _DRIVER_PACKAGE])):
+        return 0
+    print(f"  could not install {_DRIVER_PACKAGE}")
+    return 1
+
+
+def _fit_config(missing: list[tuple[str, str]], sensor_type: str) -> int:
+    """Hand the pad's settings to the wizard, which validates and restarts.
+
+    A sensor_type that is neither the pad nor empty was somebody's decision, so
+    it is asked about rather than overwritten — except with nobody at the
+    keyboard, where replacing it is the whole point of the command.
+    """
+    if sensor_type not in {"capacitive", ""}:
+        print(f"  the config says sensor_type = {sensor_type}, not the touch pad")
+        if sys.stdin.isatty():
+            if input("  Change it to capacitive? [y/N]: ").strip().lower() != "y":
+                print("  left alone; nothing changed")
+                return 1
+        else:
+            print("  changing it — that is what --fit is for")
+    args = [arg for key, value in missing for arg in ("--set", f"{key}={value}")]
+    return 0 if _run(["motion-player-setup", *args]) else 1
+
+
+def fit() -> int:
+    cfg = _load_config()
+    current = _current_touch_settings(cfg)
+    missing = touch_settings_missing(current)
+    steps = fit_plan(_I2C_DEVICE.exists(), _driver_ready(),
+                     shutil.which("i2cdetect") is not None, not missing)
+
+    print("Fitting the touch pad — MPR121 at 0x5a, electrode 0\n")
+    if not steps:
+        print("Nothing to do: the bus, the driver and the config are all in place.\n")
+
+    for step in steps:
+        if step == "i2c":
+            print("Enabling the I2C bus")
+            code = _fit_i2c()
+        elif step == "tools":
+            print("Installing i2c-tools")
+            code = _fit_tools()
+        elif step == "driver":
+            print(f"Installing {_DRIVER_PACKAGE}")
+            code = _fit_driver()
+        else:
+            print("Writing the touch pad's config")
+            code = _fit_config(missing, current["sensor.sensor_type"])
+        if code == _REBOOT_FIRST:
+            return 0
+        if code:
+            return code
+        print()
+
+    print("Hardware")
+    hardware = describe_hardware({"sensor_type": "capacitive", "i2c_bus": 1,
+                                  "i2c_address": 0x5A})
+    print(f"  {hardware}")
+    if _I2C_DEVICE.exists() and not os.access(_I2C_DEVICE, os.R_OK | os.W_OK):
+        print(f"  {_I2C_DEVICE} is not readable by {os.environ.get('USER', 'this user')} — "
+              f"sudo usermod -aG i2c $USER, then log out and back in")
+    print("\nNext: motion-player-sensor --probe, then touch and hold the pad.")
+    return 0
+
+
 USAGE = """motion-player-sensor — check the sensor the piece is configured to use.
 
   motion-player-sensor --report   what is configured, what is wired, what the log saw
   motion-player-sensor --probe    watch it live with the engine stopped, then restart it
+  motion-player-sensor --fit      the software half of fitting the touch pad
 
 --report changes nothing and is safe to run during the show. --probe stops the
 engine for as long as it runs, so the piece is dark while you are watching.
+--fit enables I2C, installs the MPR121 driver and writes the pad's config; it
+skips whatever is already done, so it is safe to run twice.
 """
 
 
@@ -298,6 +470,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if "--probe" in argv:
         return probe()
+    if "--fit" in argv:
+        return fit()
     if "--report" in argv or not argv:
         return report()
     print(USAGE)
