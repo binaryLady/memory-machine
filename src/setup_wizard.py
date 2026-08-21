@@ -72,6 +72,83 @@ def set_ini_value(text: str, section: str, key: str, value: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def get_ini_value(text: str, section: str, key: str) -> str | None:
+    """The raw value of one key in one section, or None when it is not set."""
+    header = f"[{section}]"
+    key_re = re.compile(rf"^\s*{re.escape(key)}\s*=\s*(.*?)\s*$")
+    inside = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            inside = stripped == header
+            continue
+        if inside and not stripped.startswith((";", "#")):
+            match = key_re.match(line)
+            if match:
+                return match.group(1) or None
+    return None
+
+
+# PCF8574 backpacks answer at 0x20-0x27, the PCF8574A variant at 0x38-0x3F.
+_BACKPACK_ADDRESSES = set(range(0x20, 0x28)) | set(range(0x38, 0x40))
+
+
+def parse_i2cdetect(text: str) -> list[int]:
+    """Every address i2cdetect -y printed as answering, as ints."""
+    found = []
+    for line in text.splitlines():
+        match = re.match(r"^([0-9a-f]0):((?:\s+(?:--|[0-9a-f]{2}|UU))+)\s*$", line)
+        if not match:
+            continue
+        row = int(match.group(1), 16)
+        cells = match.group(2).split()
+        # The first row is right-aligned: addresses 0x00-0x02 are never printed.
+        offset = 16 - len(cells)
+        for column, cell in enumerate(cells):
+            if cell not in ("--", "UU"):
+                found.append(row + offset + column)
+    return found
+
+
+def backpacks_on_bus(bus: int) -> list[int]:
+    """LCD backpack addresses answering on the bus, [] when nothing or no tool."""
+    try:
+        result = subprocess.run(
+            ["i2cdetect", "-y", str(bus)], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return [a for a in parse_i2cdetect(result.stdout) if a in _BACKPACK_ADDRESSES]
+
+
+def _ask_lcd_address(text: str, section: str) -> str:
+    """Ask for a panel's address, offering what the bus actually reports.
+
+    Enter keeps what the config already says — or, when exactly one backpack
+    answers on the panel's bus and it is not that address, the one that does.
+    """
+    import config as config_module
+
+    defaults = config_module.DEFAULTS[section]
+    bus = int(get_ini_value(text, section, "i2c_bus") or defaults["i2c_bus"])
+    current = get_ini_value(text, section, "i2c_address") or str(defaults["i2c_address"])
+    found = backpacks_on_bus(bus)
+    if len(found) == 1 and f"0x{found[0]:02x}" != current.lower():
+        offer = f"0x{found[0]:02x}"
+        print(f"A panel answers at {offer} on bus {bus} (the config says {current}).")
+        prompt = f"Its I2C address [Enter uses {offer}]: "
+    else:
+        offer = current
+        if not found:
+            print(f"Nothing answers on bus {bus} yet — check the wiring after setup.")
+        prompt = f"Its I2C address [Enter keeps {current}]: "
+    answer = input(prompt).strip()
+    if answer and not re.fullmatch(r"0x[0-9a-fA-F]{2}", answer):
+        print(f"That doesn't look like an address; keeping {offer}.")
+        answer = ""
+    return set_ini_value(text, section, "i2c_address", answer or offer)
+
+
 def render_prepare_hint(source: str, width: int, height: int, scaling: str) -> str:
     """The prepare command to print for a chosen screen — never run for them."""
     mode = "fill" if scaling == "fill" else "fit"
@@ -501,12 +578,7 @@ def run_questions(text: str) -> str:
     if lcd:
         text = set_ini_value(text, "lcd", "enabled", "true" if lcd == "yes" else "false")
         if lcd == "yes":
-            address = input("Its I2C address [Enter keeps 0x27]: ").strip()
-            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x27"):
-                text = set_ini_value(text, "lcd", "i2c_address", address or "0x27")
-            else:
-                print("That doesn't look like an address; keeping 0x27.")
-                text = set_ini_value(text, "lcd", "i2c_address", "0x27")
+            text = _ask_lcd_address(text, "lcd")
 
             # The panel's voice — layout, title, state words, and the icon.
             if input("Customise the panel's text and icon? [y/N]: ").strip().lower() == "y":
@@ -563,12 +635,7 @@ def run_questions(text: str) -> str:
                 "It rides the second I2C bus (dtoverlay=i2c3-pi5,pins_22_23"
                 " in /boot/firmware/config.txt; SDA pin 15, SCL pin 16)."
             )
-            address = input("Its I2C address [Enter keeps 0x27]: ").strip()
-            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x27"):
-                text = set_ini_value(text, "lcd2", "i2c_address", address or "0x27")
-            else:
-                print("That doesn't look like an address; keeping 0x27.")
-                text = set_ini_value(text, "lcd2", "i2c_address", "0x27")
+            text = _ask_lcd_address(text, "lcd2")
 
     # 4. Sleep hours.
     wants_sleep = _ask("Sleep the piece overnight?", ["yes", "no"])
