@@ -221,3 +221,22 @@ def test_fit_config_leaves_the_matching_sensor_unquestioned(monkeypatch, capsys)
 
     assert sensor_probe._fit_config([], "gamepad", "gamepad", "gamepad") == 0
     assert "not the" not in capsys.readouterr().out
+
+
+def test_the_probe_names_every_job_a_control_drives_including_the_sound_deck() -> None:
+    from types import SimpleNamespace
+
+    import sensor_probe
+
+    pad = SimpleNamespace(
+        numbers={"a": 1, "b": 0, "select": 2, "start": 3,
+                 "up": None, "down": None, "left": None, "right": None},
+        jobs={"hold": ("start",), "kaleidoscope": ("select",),
+              "audio_next": ("right", "down"), "audio_prev": ("left", "up")},
+    )
+
+    assert sensor_probe.what_a_control_does(pad, "start") == "hold"
+    assert sensor_probe.what_a_control_does(pad, "select") == "kaleidoscope"
+    assert sensor_probe.what_a_control_does(pad, "right") == "audio_next"
+    assert sensor_probe.what_a_control_does(pad, "up") == "audio_prev"
+    assert sensor_probe.what_a_control_does(pad, "a") == "nothing"

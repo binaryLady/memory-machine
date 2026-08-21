@@ -286,6 +286,13 @@ def _service(action: str) -> None:
     subprocess.run(["motion-player-toggle", f"--{action}"], check=False)
 
 
+def what_a_control_does(gamepad: Any, control: str) -> str:
+    """The jobs a control drives, as the probe prints them — "hold", "audio_next"…"""
+    from sensors.gamepad import jobs_for
+
+    return ", ".join(jobs_for(gamepad.jobs, control)) or "nothing"
+
+
 def _watch_gamepad(configured: str, gamepad: Any) -> None:
     """Watch the pad live, naming every control and saying what it does.
 
@@ -314,9 +321,7 @@ def _watch_gamepad(configured: str, gamepad: Any) -> None:
                 continue
             for control, pressed in controls_from_event(gamepad.numbers, *event):
                 jobs = jobs_for(gamepad.jobs, control)
-                if control in gamepad.audio:
-                    jobs = [*jobs, "sound"]
-                does = ", ".join(jobs) or "nothing"
+                does = what_a_control_does(gamepad, control)
                 if pressed:
                     held[control] = time.monotonic()
                     print(f"contact  {control:<6} ({does})", flush=True)
