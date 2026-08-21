@@ -72,6 +72,9 @@ case "$ACTION" in
             say "memory-machine is already running."
             exit 0
         fi
+        # A person asking to start is not a crash loop: clear the start-limit
+        # counter a run of quick restarts may have tripped.
+        run reset-failed
         run start
         report_start
         ;;
@@ -84,6 +87,7 @@ case "$ACTION" in
             run stop
             say "memory-machine stopped."
         else
+            run reset-failed
             run start
             report_start
         fi
