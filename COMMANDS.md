@@ -14,7 +14,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
 | `motion-player-sensor` | `--report` `--probe` `--fit` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened; `--fit` finds the sensor and points the config at it |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
-| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
+| `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--trim auto\|HEAD:TAIL` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
 | `motion-player-reverse` | `[SRC] [DST]` `--force` | build the pre-rendered reverse clip; run once per cut |
 | `motion-player-display` | `--show` `--set CONN MODE` `--revert` `--no-blank` | pin the HDMI output mode at boot, stop screen blanking |
@@ -365,6 +365,23 @@ motion-player-prepare ~/memory-machine-media/piece_portrait.mp4 --size 1280x800 
 
 Explicit `--crop W:H:X:Y` (ffmpeg's crop order) takes framing into your own
 hands. The clean long-term fix is still an export at the art's true frame.
+
+**A master that fades from and to black makes the idle loop dip** — under
+`idle_mode = loop_forward` the piece sinks to black every time it comes round,
+and under `hold_first_frame` the resting frame *is* black. `--trim auto`
+measures the black frames at the head and tail with blackdetect and cuts
+exactly them; `--trim HEAD:TAIL` cuts that many seconds from each end, for a
+fade that ramps rather than sits at black (look at the master and pick the
+seconds where the picture is fully up):
+
+```bash
+motion-player-prepare ~/memory-machine-media/piece.mp4 --size 1280x800 --mode fill --trim 1.5:2 --force
+```
+
+The reverse and any `--fx` twin are built from the trimmed render, so they
+match. What trimming cannot do is make the last frame flow into the first —
+that is a property of the footage; a master cut as a loop, or exported without
+fades, is the seamless version.
 
 **Preparing renames the file, and the config must follow.** That command writes
 `piece_portrait.800x1280.mp4` (and its reverse) — it does not touch
