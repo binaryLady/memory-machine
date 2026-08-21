@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# motion-player-sensor: check the sensor the piece is configured to use.
+#
+# cd to the home directory first: lgpio writes its notification FIFOs to the
+# working directory, so probing from a read-only one fails with a bare
+# "[Errno 2] ... '.lgd-nfy-3'" that says nothing about the real cause.
+set -euo pipefail
+
+cd "$HOME"
+exec python3 /opt/motion-player/sensor_probe.py "$@"

@@ -1,8 +1,9 @@
 # memory-machine
 
-A Raspberry Pi gallery installation: lift the headphones from their stand and a
-video plays in reverse while the audio plays forward. Replace them and the piece
-returns to its idle state.
+A Raspberry Pi gallery installation: the audio plays continuously, and touching
+a pad plays the video in reverse for as long as contact is held. Let go and the
+piece returns to its idle state; stay in contact all the way to the beginning
+and it turns and plays forward.
 
 This repository builds the `motion-player` Debian package. The package name is
 `motion-player`; the repo is `memory-machine`.
@@ -80,7 +81,7 @@ desktop shortcut **memory-machine-media** points to:
 ```
 
 Every video cut needs its own pre-rendered reverse, because the rewind plays
-that copy forward — a cut without one goes black the moment the headphones are
+that copy forward — a cut without one goes black the moment the pad is
 lifted. Build them once, whenever the footage changes, one call per cut:
 
 ```bash
@@ -191,10 +192,14 @@ display             = auto             ; auto | HDMI-A-1 | HDMI-A-2
 display_mode        = auto             ; auto | 1920x1080@60, re-pinned each start
 
 [audio]
-audio_sink          = auto             ; ALSA/PipeWire device NAME
+audio_sink          = USB              ; ALSA/PipeWire device NAME, or a
+                                       ; substring of one; "auto" for the
+                                       ; first non-HDMI output
 volume              = 0.8              ; fixed 0.0–1.0
-fade_out_ms         = 400
+fade_out_ms         = 400              ; unused when audio_mode = always
 on_audio_end        = silence          ; silence | loop
+audio_mode          = always           ; always | on_lift — whether the sound
+                                       ; is tied to the sensor at all
 
 [lcd]
 enabled             = false            ; 20x4 I2C character panel
@@ -205,12 +210,12 @@ engaged_bpm         = 100              ; heart rate while listening
 sleep_bpm           = 0                ; overnight; 0 = still heart
 
 [sensor]
-sensor_type         = switch           ; switch | reed | beam | reflective |
+sensor_type         = capacitive       ; switch | reed | beam | reflective |
                                        ; capacitive | distance | hall | pir |
                                        ; mmwave | gpio_raw | keyboard | none
                                        ; or fused: switch+beam
 sensor_combine      = any              ; any | all
-engaged_when        = open             ; open | closed
+engaged_when        = closed           ; open | closed
 
 gpio_pin            = 4
 pull_up             = true
@@ -252,8 +257,11 @@ restart_on_crash    = true
 
 ### Key config choices to make on site
 
-- `engaged_when`: with the headphones resting on a microswitch, lifting them
-  usually opens the contact, so `open` is the default. Verify with a multimeter.
+- `engaged_when`: a touch pad is engaged when its contact **closes**, which is
+  why `closed` is the default. A cradle microswitch is the other way round —
+  the headphones' weight holds it closed and lifting them opens it, so that
+  wants `open`. Change this whenever `sensor_type` changes;
+  `motion-player-setup` does it for you.
 - `reverse_rate`: use `fit_to_audio` if the audio is longer than the footage;
   it slows the rewind so frame 0 is reached exactly when the sound ends.
 
@@ -261,14 +269,14 @@ restart_on_crash    = true
 
 | sensor_type  | Hardware                       | Notes                                                |
 | ------------ | ------------------------------ | ---------------------------------------------------- |
-| `switch`     | Lever microswitch under stand  | Default; headphone weight closes it.                 |
+| `capacitive` | MPR121 touch pad over I²C      | Default; contact closes it, so `engaged_when=closed`. |
+| `switch`     | Lever microswitch under stand  | Headphone weight closes it; wants `engaged_when=open`. |
 | `reed`       | Reed switch + magnet in earcup | Same logic as `switch`.                              |
 | `beam`       | IR beam-break across cradle    | Shield from gallery lighting.                        |
 | `reflective` | TCRT5000 reflective proximity  | Drifts with ambient IR and earcup colour.            |
-| `capacitive` | MPR121 over I²C                | Senses hand, not headphone.                          |
 | `distance`   | HC-SR04 or VL53L0X             | Set `i2c_address` for ToF; otherwise HC-SR04.        |
 | `hall`       | Analog Hall + magnet           | Threshold-based.                                     |
-| `pir`        | Room PIR                       | Legacy; not recommended for headphone lift.          |
+| `pir`        | Room PIR                       | Legacy; presence, not a deliberate act.              |
 | `mmwave`     | Presence module                | Uses the same `gpio_pin` as a digital presence line. |
 | `gpio_raw`   | Bare digital pin               | Escape hatch.                                        |
 | `keyboard`   | Spacebar                       | Laptop dev/test only.                                |

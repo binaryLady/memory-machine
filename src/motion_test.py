@@ -16,7 +16,7 @@ from pathlib import Path
 import config
 import logging_setup
 import status as status_module
-from audio import AudioEngine
+from audio import AlwaysOnAudio, AudioEngine
 import sysinfo
 from journal import Journal
 from lcd import Heartbeat
@@ -91,6 +91,8 @@ def _apply_schedule_transition(transition: str | None, state: StateMachine, vide
         LOGGER.info("Going to sleep for the night")
     elif transition == "wake":
         video.set_mode("IDLE")
+        if cfg.audio.audio_mode == "always":
+            audio.play_looping()
         state.mark_audio_playing()
         telemetry.event("sleep_end")
         journal.record("wake")
@@ -118,12 +120,16 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
         video.set_idle_mode("loop_forward")
     status.set_display_mode(video.display_mode)
     video.set_audio_duration(audio.duration_s)
-    # The cap only applies when the picture stops with the rewind: under hold
-    # the screen goes black at the rewind's end, so the audio must end there
-    # too, with fade-room so the hold-fade is not clipped into a click. Under
-    # resume_forward or loop_reverse the picture keeps going and the audio
-    # plays its natural length; on_audio_end governs from there.
-    if cfg.playback.on_rewind_end == "hold":
+    # Under audio_mode=always the sound is the constant and starts here, so no
+    # cap applies. Otherwise the cap only applies when the picture stops with
+    # the rewind: under hold the screen goes black at the rewind's end, so the
+    # audio must end there too, with fade-room so the hold-fade is not clipped
+    # into a click. Under resume_forward or loop_reverse the picture keeps
+    # going and the audio plays its natural length; on_audio_end governs from
+    # there.
+    if cfg.audio.audio_mode == "always":
+        audio.play_looping()
+    elif cfg.playback.on_rewind_end == "hold":
         audio.set_max_duration(video.rewind_duration_s + cfg.audio.fade_out_ms / 1000.0)
     video.set_mode("IDLE")
     telemetry.start()
@@ -286,7 +292,12 @@ def run(argv: list[str] | None = None) -> int:
         video = VideoEngine(cfg)
         audio = AudioEngine(cfg)
         sensor = make_sensor(cfg.sensor)
-        state = StateMachine(cfg, audio, video, status)
+        state = StateMachine(
+            cfg,
+            AlwaysOnAudio(audio) if cfg.audio.audio_mode == "always" else audio,
+            video,
+            status,
+        )
         heartbeat = Heartbeat(cfg, status)
         heartbeat.start()
         journal = Journal(state_dir / "journal")

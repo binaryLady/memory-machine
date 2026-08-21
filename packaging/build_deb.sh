@@ -97,6 +97,9 @@ chmod 0755 "$STAGE/usr/bin/motion-player-install-deb"
 cp "$REPO_ROOT/packaging/motion-player-toggle" "$STAGE/usr/bin/motion-player-toggle"
 chmod 0755 "$STAGE/usr/bin/motion-player-toggle"
 
+cp "$REPO_ROOT/packaging/motion-player-sensor" "$STAGE/usr/bin/motion-player-sensor"
+chmod 0755 "$STAGE/usr/bin/motion-player-sensor"
+
 cp "$REPO_ROOT/packaging/motion-player-media" "$STAGE/usr/bin/motion-player-media"
 chmod 0755 "$STAGE/usr/bin/motion-player-media"
 

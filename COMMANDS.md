@@ -12,6 +12,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
 | `motion-player-setup` | `--set section.key=value` `--save-setup NAME` `--load-setup NAME` `--list-setups` | guided configuration: setups menu (save/load/duplicate a named configuration), screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
+| `motion-player-sensor` | `--report` `--probe` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
@@ -149,7 +150,7 @@ The piece needs these files in `~/memory-machine-media/`:
 | `piece_<shape>.reverse.mp4` | pre-rendered reverse of that cut | with each cut |
 
 **Every video file needs its own reversed copy.** The rewind plays that copy
-forward, so a cut without one goes black the moment the headphones are lifted.
+forward, so a cut without one goes black the moment a visitor engages the piece.
 That applies to the portrait cut and to anything produced by
 `motion-player-prepare` as much as to `piece.mp4`.
 
@@ -510,7 +511,7 @@ setup wizard sets the mode with its gallery/test presets.
 
 An optional 20x4 character LCD on I2C, showing a beating heart above the
 installation's health. The heart beats slowly at rest and quickens while the
-headphones are lifted, so the panel reports the state of the piece rather than
+a visitor engages the piece, so the panel reports its state rather than
 just the machine.
 
 Enable I2C once, then find the panel's address — these modules are almost always
@@ -808,6 +809,37 @@ motion-player --log
 The log is the primary output channel — the engine writes almost nothing to a
 terminal unless you pass `--verbose`.
 
+### Is the sensor real yet?
+
+```bash
+motion-player-sensor --report
+```
+
+Reads the config and the engine's own log and answers, in one place, what has
+otherwise been checked by hand: what the sensor is configured as, whether the
+hardware answers (`i2cdetect` for a touch pad, a GPIO read for anything else),
+how long a visitor must keep contact to reach the forward turn, and two
+verdicts — whether a lift has **ever** been accepted from real hardware, and
+whether the rewind has **ever** run end to end. It changes nothing and is safe
+to run during the show.
+
+The hold figure is the one to look at first. It is the rewind's length, so
+under `reverse_rate = fit_to_audio` it is the length of the audio. Thirty
+seconds is an invitation; three minutes is an endurance test, and the report
+says so. Raising `playback.reverse_rate` above 1.0 shortens the rewind without
+touching the sound.
+
+```bash
+motion-player-sensor --probe
+```
+
+Watches the sensor live with the engine stopped — it holds the GPIO while it
+runs — and prints every contact and release **with the hold time**, then
+restarts the engine when you quit. The hold time is the point: a pad reporting
+holds of a few milliseconds is sending taps, not continuous contact, and the
+piece needs contact held for the whole rewind. A TTP223-style pad must be in
+direct mode, not toggle, or letting go becomes a second tap.
+
 ---
 
 ## Config
@@ -897,16 +929,17 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `audio_sink` | `auto` | ALSA/PipeWire device NAME, not index. Use "auto" for first non-HDMI output. |
+| `audio_sink` | `USB` | ALSA/PipeWire device NAME, not index. Matched exactly first, then as a substring, so "USB" pins the USB adapter whatever its full model string is. "auto" takes the first non-HDMI output instead. Pinned rather than auto so the sound can never wander to a screen's speakers. |
 | `volume` | `0.8` | Fixed volume, 0.0–1.0. Staff cannot change this at runtime. |
-| `fade_out_ms` | `400` | Fade-out length when the headphones are replaced. |
+| `fade_out_ms` | `400` | Fade-out length when the sensor is released. Unused when audio_mode = always. |
 | `on_audio_end` | `silence` | on_audio_end: silence \| loop |
+| `audio_mode` | `always` | audio_mode: always \| on_lift — whether the sound is tied to the sensor. always   the sound loops continuously from boot and the sensor drives only the picture on_lift  the sound starts when the sensor engages and fades when it is released — the piece's original headphone behaviour |
 
 ### `[lcd]`
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `enabled` | `false` | An optional 20x4 character LCD on I2C showing a beating heart and health figures. The heart quickens while the headphones are lifted. |
+| `enabled` | `false` | An optional 20x4 character LCD on I2C showing a beating heart and health figures. The heart quickens while a visitor is engaged with the piece. |
 | `idle_bpm` | `60` | — |
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
@@ -926,9 +959,9 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `sensor_type` | `switch` | sensor_type: switch \| reed \| beam \| reflective \| capacitive \| distance \| hall \| pir \| mmwave \| gpio_raw \| keyboard \| none "none" means no sensor is fitted: the piece loops forward and never rewinds. May be a fused list, e.g. switch+beam. |
+| `sensor_type` | `capacitive` | sensor_type: switch \| reed \| beam \| reflective \| capacitive \| distance \| hall \| pir \| mmwave \| gpio_raw \| keyboard \| none "none" means no sensor is fitted: the piece loops forward and never rewinds. May be a fused list, e.g. switch+beam. |
 | `sensor_combine` | `any` | sensor_combine: any \| all  (used only when fusing multiple sensors) |
-| `engaged_when` | `open` | engaged_when: open \| closed — which raw electrical state means "lifted" |
+| `engaged_when` | `closed` | engaged_when: open \| closed — which raw electrical state means "lifted". A touch pad is engaged when its contact CLOSES; a cradle switch is lifted when its contact OPENS. Change this whenever sensor_type changes. |
 | `gpio_pin` | `4` | --- digital backends: switch, reed, beam, reflective, hall, pir, gpio_raw --- |
 | `pull_up` | `true` | — |
 | `trigger_pin` | `23` | --- distance backends --- |
@@ -973,7 +1006,7 @@ description, edit the comments in `config/config.default.ini` and run
 
 ---
 
-## Testing without the headphone sensor
+## Testing without the sensor
 
 Stop the service first — the engine takes a single-instance lock:
 
@@ -1185,34 +1218,23 @@ loop hides the problem.
 unless `--verbose` is the first argument. Read the log, or call
 `python3 /opt/motion-player/motion_test.py` directly.
 
-**Is the switch itself wired and working?** Probe the physical switch directly,
-with no engine in the way. Stop the service first (the engine holds the GPIO),
-then run this from your home directory — lgpio writes its FIFOs to the working
-directory, so a read-only one fails:
+**Is the sensor itself wired and working?**
 
 ```bash
-motion-player-toggle --stop
+motion-player-sensor --probe
 ```
 
-```bash
-cd ~ && python3 - <<'EOF'
-from gpiozero import Button
-from signal import pause
-b = Button(4, pull_up=True, bounce_time=0.05)
-print("watching GPIO 4 — flip the switch; Ctrl+C to stop")
-print("now:", "pressed (headphones down)" if b.is_pressed else "released (headphones lifted)")
-b.when_pressed = lambda: print("pressed  (headphones down)")
-b.when_released = lambda: print("released (headphones lifted)")
-pause()
-EOF
-```
+It stops the engine (which holds the GPIO), watches whichever backend the
+config names, prints every contact and release with its hold time, and restarts
+the engine when you quit. It also runs from your home directory for you — lgpio
+writes its FIFOs to the working directory, so probing from a read-only one
+fails with a bare `.lgd-nfy` error that says nothing about the real cause.
 
-`pull_up=True` and the 50ms bounce match what the engine's `switch` backend
-uses, so a switch that prints cleanly here will work in the piece. No output on
-flips means the wiring, the pin number, or the switch itself. Restore with
-`motion-player-toggle --start`.
+No output at all on contact means the wiring, the pin or address, or the sensor
+itself. Holds of a few milliseconds mean it is sending taps rather than
+continuous contact, which the piece cannot use.
 
-**Lifting the headphones does nothing, and the log mentions `.lgd-nfy`.**
+**Touching the sensor does nothing, and the log mentions `.lgd-nfy`.**
 lgpio creates its notification FIFOs in the process's working directory, so a
 read-only one makes every GPIO backend fail — reported as a bare
 `[Errno 2] No such file or directory: '.lgd-nfy-3'`, or as `BadPinFactory` if
@@ -1224,7 +1246,7 @@ writable:
 cd ~ && python3 /opt/motion-player/motion_test.py --verbose
 ```
 
-**Lifting the headphones does nothing, and the log says `BadPinFactory`.**
+**Touching the sensor does nothing, and the log says `BadPinFactory`.**
 gpiozero could not load a GPIO backend, so there is no sensor. The piece keeps
 running: it loops forward instead of holding a still frame, and `space` still
 triggers a rewind by hand while you sort the hardware out. A still frame would

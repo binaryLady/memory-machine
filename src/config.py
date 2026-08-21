@@ -86,6 +86,7 @@ class AudioConfig:
     volume: float
     fade_out_ms: int
     on_audio_end: str
+    audio_mode: str
 
 
 @dataclass(frozen=True)
@@ -181,10 +182,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "display_mode": "auto",
     },
     "audio": {
-        "audio_sink": "auto",
+        "audio_sink": "USB",
         "volume": 0.8,
         "fade_out_ms": 400,
         "on_audio_end": "silence",
+        "audio_mode": "always",
     },
     "lcd": {
         "enabled": False,
@@ -206,9 +208,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "layout": "status",
     },
     "sensor": {
-        "sensor_type": "switch",
+        "sensor_type": "capacitive",
         "sensor_combine": "any",
-        "engaged_when": "open",
+        "engaged_when": "closed",
         "gpio_pin": 4,
         "pull_up": True,
         "trigger_pin": 23,
@@ -251,6 +253,7 @@ _VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_LCD_ICONS = {"heart", "star", "ring", "note", "eye", "none"}
 _VALID_LCD_LAYOUTS = {"status", "art", "show"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
+_VALID_AUDIO_MODE = {"always", "on_lift"}
 _VALID_SENSOR_TYPES = {
     "none",
     "switch",
@@ -432,6 +435,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             volume=_parse_float(audio_raw.get("volume"), DEFAULTS["audio"]["volume"], 0.0, 1.0),
             fade_out_ms=_parse_int(audio_raw.get("fade_out_ms"), DEFAULTS["audio"]["fade_out_ms"], 0),
             on_audio_end=str(audio_raw.get("on_audio_end", DEFAULTS["audio"]["on_audio_end"])),
+            audio_mode=str(audio_raw.get("audio_mode", DEFAULTS["audio"]["audio_mode"])),
         ),
         lcd=LcdConfig(
             enabled=_parse_bool(lcd_raw.get("enabled"), DEFAULTS["lcd"]["enabled"]),
@@ -523,6 +527,10 @@ def validate(config: Config) -> list[str]:
     if config.audio.on_audio_end not in _VALID_ON_AUDIO_END:
         problems.append(
             f"audio.on_audio_end must be one of {_VALID_ON_AUDIO_END}; got {config.audio.on_audio_end!r}"
+        )
+    if config.audio.audio_mode not in _VALID_AUDIO_MODE:
+        problems.append(
+            f"audio.audio_mode must be one of {_VALID_AUDIO_MODE}; got {config.audio.audio_mode!r}"
         )
     if config.sensor.engaged_when not in _VALID_ENGAGED_WHEN:
         problems.append(

@@ -172,3 +172,48 @@ def test_a_nonsense_layout_is_reported(tmp_path) -> None:
     cfg = config.load(str(path))
 
     assert [p for p in config.validate(cfg) if "lcd.layout" in p]
+
+
+def test_audio_mode_defaults_to_always_when_the_key_is_absent(tmp_path: Path) -> None:
+    # rhubarb's /etc config predates the key entirely; this is what it gets.
+    path = _write(tmp_path, "[audio]\nvolume = 0.5\n")
+    cfg = config.load(path)
+
+    assert cfg.audio.audio_mode == "always"
+    # validate() also reports the absent media; only the mode matters here.
+    assert not [p for p in config.validate(cfg) if "audio_mode" in p]
+
+
+def test_audio_mode_is_read_when_it_is_present(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[audio]\naudio_mode = on_lift\n")
+
+    assert config.load(path).audio.audio_mode == "on_lift"
+
+
+def test_a_nonsense_audio_mode_is_reported(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[audio]\naudio_mode = sometimes\n")
+
+    problems = config.validate(config.load(path))
+
+    assert any("audio.audio_mode" in problem for problem in problems)
+
+
+def test_the_shipped_defaults_are_the_touch_pad_and_its_polarity(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[system]\nlog_level = debug\n")
+    cfg = config.load(path)
+
+    assert cfg.sensor.sensor_type == "capacitive"
+    # A pad is engaged when its contact closes; the polarity must ship with it.
+    assert cfg.sensor.engaged_when == "closed"
+    assert cfg.audio.audio_sink == "USB"
+
+
+def test_the_packaged_ini_and_the_defaults_dict_agree() -> None:
+    """Two sources, both read — a value changed in one only is a real bug."""
+    packaged = config.load(str(Path(__file__).resolve().parent.parent
+                               / "config" / "config.default.ini"))
+
+    assert packaged.sensor.sensor_type == config.DEFAULTS["sensor"]["sensor_type"]
+    assert packaged.sensor.engaged_when == config.DEFAULTS["sensor"]["engaged_when"]
+    assert packaged.audio.audio_mode == config.DEFAULTS["audio"]["audio_mode"]
+    assert packaged.audio.audio_sink == config.DEFAULTS["audio"]["audio_sink"]
