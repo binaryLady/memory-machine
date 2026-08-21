@@ -640,3 +640,24 @@ def test_arming_reports_each_step_and_survives_a_failure(monkeypatch) -> None:
     assert len(report) == 5
     assert sum(line.startswith("  ok") for line in report) == 4
     assert any(line.startswith("  !!") and "no such option" in line for line in report)
+
+
+def test_the_wizards_restart_clears_the_start_limit_first(monkeypatch) -> None:
+    """Six quick --set restarts look like a crash loop to systemd; a person is not one."""
+    import os
+    import pwd
+
+    import setup_wizard
+
+    me = pwd.getpwuid(os.getuid()).pw_name
+    monkeypatch.setenv("SUDO_USER", me)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(setup_wizard.subprocess, "run",
+                        lambda cmd, **k: calls.append(cmd) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr("builtins.print", lambda *a, **k: None)
+
+    setup_wizard._restart_service()
+
+    steps = [" ".join(c[c.index("--user") + 1:]) for c in calls]
+    assert steps == ["daemon-reload", "reset-failed motion-player.service",
+                     "restart motion-player.service"]

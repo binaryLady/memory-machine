@@ -506,7 +506,10 @@ def _restart_service() -> None:
         print(f"Could not find user {operator}; restart by hand with motion-player-toggle.")
         return
     env = {"XDG_RUNTIME_DIR": f"/run/user/{uid}"}
-    for step in ("daemon-reload", "restart motion-player.service"):
+    # reset-failed first: systemd refuses a sixth start inside two minutes to
+    # stop a crashing piece from flapping, and a run of --set restarts looks
+    # the same to it. A person asking is not a crash loop.
+    for step in ("daemon-reload", "reset-failed motion-player.service", "restart motion-player.service"):
         result = subprocess.run(
             ["sudo", "-u", operator, "env", f"XDG_RUNTIME_DIR={env['XDG_RUNTIME_DIR']}",
              "systemctl", "--user", *step.split()],
