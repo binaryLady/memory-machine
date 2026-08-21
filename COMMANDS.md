@@ -12,7 +12,7 @@ on the Pi unless marked **(laptop)**.
 | `motion-player-toggle` | `--start` `--stop` | start or stop the piece; bare call toggles |
 | `motion-player-setup` | `--set section.key=value` `--save-setup NAME` `--load-setup NAME` `--list-setups` | guided configuration: setups menu (save/load/duplicate a named configuration), screen shape, which render plays, sensor, audio output, forward reward, heartbeat panel, sleep, telemetry, run mode; `--set` writes values directly, no questions |
 | `motion-player-status` | `--json` `--watch` | state, sensor, health figures, last error, resolved config |
-| `motion-player-sensor` | `--report` `--probe` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened |
+| `motion-player-sensor` | `--report` `--probe` `--fit` | what the sensor is configured as, whether it answers, how long a visitor must hold on, and whether a lift and a rewind have ever actually happened; `--fit` does the software half of fitting the touch pad |
 | `motion-player-update` | `--check` `--force` `--auto` `--enable-auto` `--disable-auto` | fetch, rebuild, reinstall, restart; rolls back if the service does not stay up |
 | `motion-player-prepare` | `[SRC]` `--size WxH` `--mode fit\|fill\|tile` `--crop auto\|W:H:X:Y` `--rotate cw\|ccw` `--fx double-h\|mirror-h\|mirror-v\|kaleidoscope` `--force` `--apply` `--no-apply` | render a cut at the screen's resolution (optionally turned 90° and/or with a baked symmetry), build its reverse, and offer to point the config at it; run per cut |
 | `motion-player-prepare-all` | `[PROFILE …]` `--force` `--report` | build the whole render library — every screen profile from both masters — or report every clip's true dimensions and reverse status |
@@ -808,6 +808,43 @@ motion-player --log
 
 The log is the primary output channel — the engine writes almost nothing to a
 terminal unless you pass `--verbose`.
+
+### Fitting the touch pad
+
+Wire the MPR121 breakout to the Pi first — it shares the I²C bus with the LCD,
+so both sit on the same two pins:
+
+| MPR121 | Pi header |
+| ------ | ---------- |
+| VIN | pin 1 (3V3) |
+| GND | pin 6 (GND) |
+| SDA | pin 3 (GPIO 2) |
+| SCL | pin 5 (GPIO 3) |
+| ADDR | leave unconnected — that is what makes it 0x5a |
+| IRQ | leave unconnected — the backend polls |
+
+The pad itself is one wire from electrode **0** to a plate or a length of
+copper tape; electrode 0 is what `sensor.touch_channel = 0` means.
+
+Then the software half, which is one command:
+
+```bash
+motion-player-sensor --fit
+```
+
+Enables the I²C bus, installs `i2c-tools` and the MPR121 driver, and writes the
+pad's three settings — `sensor_type = capacitive`, `engaged_when = closed`,
+`i2c_address = 0x5a`. Those move together or the piece breaks quietly: a pad
+left on `open` runs whenever nobody is touching it, and `0x29` is the
+range-finder's address, not the pad's. Every step is skipped when it is already
+done, so running `--fit` twice is safe. If it had to turn the bus on, reboot
+and run it again — `/dev/i2c-1` only appears after a restart.
+
+The driver is `adafruit-circuitpython-mpr121`, installed with pip into the
+system python because neither it nor Blinka is packaged for apt — which is also
+why the `.deb` cannot depend on them. Without them a correctly wired pad still
+does nothing: the backend fails to start and the engine falls back to the
+keyboard.
 
 ### Is the sensor real yet?
 

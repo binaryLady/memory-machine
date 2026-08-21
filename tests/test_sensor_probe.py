@@ -1,7 +1,14 @@
 """motion-player-sensor tests: the pure log parsing, arithmetic, and wording."""
 from __future__ import annotations
 
-from sensor_probe import format_report, hold_seconds, parse_log
+from sensor_probe import (
+    TOUCH_SETTINGS,
+    fit_plan,
+    format_report,
+    hold_seconds,
+    parse_log,
+    touch_settings_missing,
+)
 
 
 def fixture_log(overrides: list[str] | None = None) -> list[str]:
@@ -116,3 +123,57 @@ def test_report_shows_the_pin_for_a_digital_backend_and_the_bus_for_a_pad() -> N
 
     assert "gpio_pin      4" in digital
     assert "i2c_address" in pad and "channel 0" in pad
+
+
+def touch_config_fixture(**overrides: str) -> dict:
+    base = {
+        "sensor.sensor_type": "capacitive",
+        "sensor.engaged_when": "closed",
+        "sensor.i2c_address": "0x5a",
+        "sensor.touch_channel": "0",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_fit_plan_lists_only_what_the_machine_is_missing() -> None:
+    assert fit_plan(i2c_ready=False, driver_ready=False, tools_ready=False,
+                    config_ready=False) == ["i2c", "tools", "driver", "config"]
+    assert fit_plan(i2c_ready=True, driver_ready=False, tools_ready=True,
+                    config_ready=True) == ["driver"]
+
+
+def test_fit_plan_is_empty_once_everything_is_in_place() -> None:
+    assert fit_plan(i2c_ready=True, driver_ready=True, tools_ready=True,
+                    config_ready=True) == []
+
+
+def test_touch_settings_are_the_shipped_defaults() -> None:
+    # engaged_when and i2c_address move together with sensor_type or the piece
+    # breaks silently: a pad left on "open" runs whenever nobody touches it,
+    # and 0x29 is the range-finder's address, not the pad's.
+    assert dict(TOUCH_SETTINGS) == touch_config_fixture()
+
+
+def test_touch_settings_missing_is_empty_when_the_config_already_matches() -> None:
+    assert touch_settings_missing(touch_config_fixture()) == []
+
+
+def test_touch_settings_missing_carries_the_polarity_and_address_with_the_sensor() -> None:
+    switch = touch_config_fixture(**{"sensor.sensor_type": "switch",
+                                     "sensor.engaged_when": "open",
+                                     "sensor.i2c_address": "0x29"})
+
+    assert touch_settings_missing(switch) == [
+        ("sensor.sensor_type", "capacitive"),
+        ("sensor.engaged_when", "closed"),
+        ("sensor.i2c_address", "0x5a"),
+    ]
+
+
+def test_touch_settings_missing_treats_an_unset_address_as_missing() -> None:
+    # The backend falls back to 0x5a when the key is unset, but the report and
+    # the wizard both state it, so --fit writes it rather than leaving it blank.
+    assert touch_settings_missing(touch_config_fixture(**{"sensor.i2c_address": ""})) == [
+        ("sensor.i2c_address", "0x5a"),
+    ]

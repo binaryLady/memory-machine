@@ -34,6 +34,19 @@ for pkg in python3-opencv python3-gpiozero python3-lgpio python3-pygame; do
     sudo apt-get install -y "$pkg" || echo "WARNING: could not install $pkg"
 done
 
+# The shipped sensor is a capacitive pad on I2C, so the bus has to be on and
+# the MPR121 driver present. Neither Blinka nor the driver is packaged for apt,
+# which is why this is pip and not a dependency of the deb — and without them a
+# correctly wired pad still does nothing: the backend cannot start and the
+# engine falls back to the keyboard. --break-system-packages is what Debian
+# trixie needs; the plain form is the fallback for an older pip.
+if command -v raspi-config >/dev/null 2>&1; then
+    sudo raspi-config nonint do_i2c 0 || echo "WARNING: could not enable I2C"
+fi
+sudo pip3 install --break-system-packages adafruit-circuitpython-mpr121 \
+    || sudo pip3 install adafruit-circuitpython-mpr121 \
+    || echo "WARNING: no MPR121 driver; run motion-player-sensor --fit"
+
 # Build and install the package.
 make release
 DEB="$(ls -t ./motion-player_*.deb | head -n1)"
