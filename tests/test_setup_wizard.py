@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
 
 import setup_wizard
 from setup_wizard import (
@@ -466,3 +467,120 @@ def test_the_packaged_ini_points_at_the_sensor_it_ships_with() -> None:
     # The pad is no longer the shipped sensor, but its address still has to be
     # the one the wizard writes when somebody picks it.
     assert cfg.sensor.i2c_address == 0x5A, "the MPR121's address, not the ToF's"
+
+
+I2CDETECT_ONE_PANEL = """\
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:                         -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 3f
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- --
+"""
+
+I2CDETECT_EMPTY = I2CDETECT_ONE_PANEL.replace("3f", "--")
+
+
+def test_get_ini_value_reads_the_key_from_its_own_section_only() -> None:
+    from setup_wizard import get_ini_value
+
+    text = "[lcd]\ni2c_address = 0x27\n; i2c_bus = 9\n[lcd2]\ni2c_address = 0x3f\ni2c_bus =\n"
+
+    assert get_ini_value(text, "lcd", "i2c_address") == "0x27"
+    assert get_ini_value(text, "lcd2", "i2c_address") == "0x3f"
+    assert get_ini_value(text, "lcd", "i2c_bus") is None, "a commented key is not set"
+    assert get_ini_value(text, "lcd2", "i2c_bus") is None, "an empty key is not set"
+
+
+def test_parse_i2cdetect_reads_the_grid_with_its_ragged_first_row() -> None:
+    from setup_wizard import parse_i2cdetect
+
+    # Modern i2c-tools start row 0 at 0x08 (eight cells); older ones at 0x03.
+    busy = I2CDETECT_ONE_PANEL.replace("00:                         --", "00:                         08")
+    busy = busy.replace("50: -- -- -- -- -- -- -- -- -- -- --", "50: -- -- -- -- -- -- -- -- -- -- 5a")
+    old_tools = I2CDETECT_EMPTY.replace("00:                         -- --", "00:          03 -- -- -- -- -- --")
+
+    assert parse_i2cdetect(I2CDETECT_ONE_PANEL) == [0x3F]
+    assert parse_i2cdetect(busy) == [0x08, 0x3F, 0x5A]
+    assert parse_i2cdetect(old_tools) == [0x03]
+    assert parse_i2cdetect(I2CDETECT_EMPTY) == []
+    assert parse_i2cdetect("i2cdetect: command not found") == []
+
+
+def test_backpacks_on_bus_keeps_only_lcd_backpack_addresses(monkeypatch) -> None:
+    import setup_wizard
+
+    grid = I2CDETECT_ONE_PANEL.replace("50: -- -- -- -- -- -- -- -- -- -- --", "50: -- -- -- -- -- -- -- -- -- -- 5a")
+    monkeypatch.setattr(setup_wizard.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(stdout=grid))
+
+    assert setup_wizard.backpacks_on_bus(3) == [0x3F]
+
+
+def test_backpacks_on_bus_is_empty_without_i2c_tools(monkeypatch) -> None:
+    import setup_wizard
+
+    def missing(*a, **k):
+        raise FileNotFoundError("i2cdetect")
+
+    monkeypatch.setattr(setup_wizard.subprocess, "run", missing)
+
+    assert setup_wizard.backpacks_on_bus(1) == []
+
+
+def _answer_address(monkeypatch, found: list[int], typed: str = "") -> tuple[list[str], list[str]]:
+    import setup_wizard
+
+    prompts: list[str] = []
+    said: list[str] = []
+    monkeypatch.setattr(setup_wizard, "backpacks_on_bus", lambda bus: found)
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or typed)
+    monkeypatch.setattr("builtins.print", lambda *a, **k: said.append(" ".join(str(x) for x in a)))
+    return prompts, said
+
+
+def test_enter_keeps_the_address_already_in_the_config(monkeypatch) -> None:
+    from setup_wizard import _ask_lcd_address, get_ini_value
+
+    prompts, _ = _answer_address(monkeypatch, found=[0x3F])
+    text = _ask_lcd_address("[lcd2]\ni2c_bus = 3\ni2c_address = 0x3f\n", "lcd2")
+
+    assert get_ini_value(text, "lcd2", "i2c_address") == "0x3f"
+    assert prompts == ["Its I2C address [Enter keeps 0x3f]: "]
+
+
+def test_enter_takes_the_one_panel_the_bus_reports_when_the_config_disagrees(monkeypatch) -> None:
+    from setup_wizard import _ask_lcd_address, get_ini_value
+
+    prompts, said = _answer_address(monkeypatch, found=[0x3F])
+    text = _ask_lcd_address("[lcd2]\ni2c_bus = 3\ni2c_address = 0x27\n", "lcd2")
+
+    assert get_ini_value(text, "lcd2", "i2c_address") == "0x3f"
+    assert prompts == ["Its I2C address [Enter uses 0x3f]: "]
+    assert any("answers at 0x3f on bus 3" in line for line in said)
+
+
+def test_a_silent_bus_keeps_the_config_and_says_so(monkeypatch) -> None:
+    from setup_wizard import _ask_lcd_address, get_ini_value
+
+    prompts, said = _answer_address(monkeypatch, found=[])
+    text = _ask_lcd_address("[lcd]\n", "lcd")
+
+    assert get_ini_value(text, "lcd", "i2c_address") == "0x27", "the shipped default"
+    assert prompts == ["Its I2C address [Enter keeps 0x27]: "]
+    assert any("Nothing answers on bus 1" in line for line in said)
+
+
+def test_a_typed_address_wins_and_garbage_is_refused(monkeypatch) -> None:
+    from setup_wizard import _ask_lcd_address, get_ini_value
+
+    _answer_address(monkeypatch, found=[0x3F], typed="0x26")
+    assert get_ini_value(_ask_lcd_address("[lcd2]\n", "lcd2"), "lcd2", "i2c_address") == "0x26"
+
+    _, said = _answer_address(monkeypatch, found=[0x3F], typed="banana")
+    text = _ask_lcd_address("[lcd2]\n", "lcd2")
+    assert get_ini_value(text, "lcd2", "i2c_address") == "0x3f"
+    assert any("keeping 0x3f" in line for line in said)
