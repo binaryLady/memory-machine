@@ -64,13 +64,15 @@ DEFAULT_LABELS = {
 }
 
 # The instructions panel: her name on every page, the controls in the
-# operator's words, hers underneath. Each page is up to four rows of at most
-# 20 printable-ASCII columns; the first row leaves the icon's columns clear.
+# operator's words, and the piece speaking for itself underneath — first
+# person, to the one standing in front of it. Each page is up to four rows of
+# at most 20 printable-ASCII columns; the first row leaves the icon's columns
+# clear.
 DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
-    ("Memory<>Machine", "PLAYER DETECTED", "she is watching", "you, watching her"),
-    ("Memory<>Machine", "HOLD START or SELECT", "she plays in reverse", "let go: she returns"),
-    ("Memory<>Machine", "stay to the start", "and she turns", "to face you"),
-    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: her sounds", "turn the deck"),
+    ("Memory<>Machine", "PLAYER DETECTED", "I am watching", "you, watching me"),
+    ("Memory<>Machine", "HOLD START or SELECT", "I play in reverse", "let go: I return"),
+    ("Memory<>Machine", "stay to the start", "and I turn", "to face you"),
+    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: my sounds", "turn the deck"),
     ("Memory<>Machine", "observed as object", "or understood?", "NO WRONG MOVES"),
 )
 
