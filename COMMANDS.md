@@ -585,11 +585,15 @@ beat, so the animation stays a handful of character writes.
 
 ### The second panel — the visitor's instruction card
 
-A second 20x4 panel on the same bus renders the controller instructions from
+A second 20x4 panel renders the controller instructions from
 [CONTROLLER.md](CONTROLLER.md) as a rotating deck of pages, each led by
 `Memory<>Machine` with the heart beating beside it and a star twinkling in
-the far corner. Jumper the second backpack to its own address (solder-bridge
-A0, usually giving 0x26), confirm both appear in `i2cdetect -y 1`, then:
+the far corner. It rides the Pi 5's second hardware I2C bus so both
+backpacks keep their factory 0x27 address — no solder bridge. Add
+`dtoverlay=i2c3-pi5,pins_22_23` to `/boot/firmware/config.txt` and reboot;
+wire the second panel's SDA to GPIO 22 (physical pin 15) and SCL to GPIO 23
+(pin 16), power and ground to any spare 5V/GND pins. Confirm it appears in
+`i2cdetect -y 3` (the heartbeat panel stays on `i2cdetect -y 1`), then:
 
 ```bash
 sudo motion-player-setup --set lcd2.enabled=true
@@ -1084,9 +1088,9 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `enabled` | `false` | A second 20x4 panel — the visitor's instruction card, distilled from CONTROLLER.md. It shares the shared I2C bus with the heartbeat panel; jumper its backpack to a different address (usually 0x26). Every [lcd] key works here too — icon, bpm, labels, layout — and it goes dark overnight with the rest of the piece. |
-| `i2c_bus` | `1` | — |
-| `i2c_address` | `0x26` | — |
+| `enabled` | `false` | A second 20x4 panel — the visitor's instruction card, distilled from CONTROLLER.md. It rides the Pi 5's second hardware I2C bus so both backpacks keep their factory 0x27 address — add dtoverlay=i2c3-pi5,pins_22_23 to /boot/firmware/config.txt (SDA on GPIO 22 / physical pin 15, SCL on GPIO 23 / pin 16) and reboot. Every [lcd] key works here too — icon, bpm, labels, layout — and it goes dark overnight with the rest of the piece. |
+| `i2c_bus` | `3` | — |
+| `i2c_address` | `0x27` | — |
 | `layout` | `instructions` | — |
 | `page_seconds` | `6` | Seconds each instruction page stays up before the deck turns. |
 | `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and hers underneath. |

@@ -295,8 +295,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 }
 
 # The second panel — the visitor's instruction card — shares the heartbeat
-# panel's whole vocabulary; only its address and its job differ.
-DEFAULTS["lcd2"] = dict(DEFAULTS["lcd"], i2c_address="0x26", layout="instructions")
+# panel's whole vocabulary; only its bus and its job differ. It lives on the
+# Pi 5's second hardware bus (dtoverlay=i2c3-pi5,pins_22_23 -> /dev/i2c-3)
+# so both backpacks keep their factory 0x27 address, no solder bridge.
+DEFAULTS["lcd2"] = dict(DEFAULTS["lcd"], i2c_bus=3, layout="instructions")
 
 _VALID_IDLE_MODES = {"hold_first_frame", "loop_forward", "black"}
 _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
@@ -729,7 +731,7 @@ def validate(config: Config) -> list[str]:
         problems.append(
             f"lcd and lcd2 both claim bus {config.lcd.i2c_bus} address "
             f"0x{config.lcd.i2c_address:02X} — two panels need two addresses "
-            "(jumper the second backpack, usually to 0x26)"
+            "or two buses (lcd2 ships on bus 3, the i2c3-pi5 overlay)"
         )
 
     dm = config.playback.display_mode

@@ -559,12 +559,16 @@ def run_questions(text: str) -> str:
     if lcd2:
         text = set_ini_value(text, "lcd2", "enabled", "true" if lcd2 == "yes" else "false")
         if lcd2 == "yes":
-            address = input("Its I2C address [Enter keeps 0x26]: ").strip()
-            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x26"):
-                text = set_ini_value(text, "lcd2", "i2c_address", address or "0x26")
+            print(
+                "It rides the second I2C bus (dtoverlay=i2c3-pi5,pins_22_23"
+                " in /boot/firmware/config.txt; SDA pin 15, SCL pin 16)."
+            )
+            address = input("Its I2C address [Enter keeps 0x27]: ").strip()
+            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x27"):
+                text = set_ini_value(text, "lcd2", "i2c_address", address or "0x27")
             else:
-                print("That doesn't look like an address; keeping 0x26.")
-                text = set_ini_value(text, "lcd2", "i2c_address", "0x26")
+                print("That doesn't look like an address; keeping 0x27.")
+                text = set_ini_value(text, "lcd2", "i2c_address", "0x27")
 
     # 4. Sleep hours.
     wants_sleep = _ask("Sleep the piece overnight?", ["yes", "no"])
