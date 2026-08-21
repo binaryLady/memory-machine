@@ -884,7 +884,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `idle_bpm` | `60` | — |
 | `engaged_bpm` | `100` | — |
 | `sleep_bpm` | `0` | Heart rate while asleep; 0 = a still heart. |
-| `layout` | `status` | layout: status \| art. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with asterisk stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. |
+| `layout` | `status` | layout: status \| art \| show. status is the readout — icon, title, state word, health figures. art is the panel as a small artwork: the icon centered with stars twinkling around it, no text at all — the choice for a portrait-mounted panel, where ROM text would lie sideways. show keeps the title always up over the centered beating icon, with stars whose energy follows the piece's state — calm at rest, lively while someone listens, every star lit for the wake-up hello. |
 | `title` | `memory-machine` | The panel's voice — printable ASCII only, up to 18 columns each. A key left empty on purpose (title =) means blank, not the default. |
 | `label_idle` | `at rest` | — |
 | `label_engaged` | `listening` | — |

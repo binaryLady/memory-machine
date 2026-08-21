@@ -247,7 +247,7 @@ _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
 _VALID_MODES = {"production", "test"}
 _VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_LCD_ICONS = {"heart", "star", "ring", "note", "eye", "none"}
-_VALID_LCD_LAYOUTS = {"status", "art"}
+_VALID_LCD_LAYOUTS = {"status", "art", "show"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_SENSOR_TYPES = {
     "none",

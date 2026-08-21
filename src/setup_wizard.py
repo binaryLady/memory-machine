@@ -557,7 +557,8 @@ def main() -> int:
                 style = _ask(
                     "Panel style?",
                     ["status (icon, words, health figures)",
-                     "art (icon centered, stars twinkling, no text)"],
+                     "art (icon centered, stars twinkling, no text)",
+                     "show (title always up, icon + stars, state personalities)"],
                 )
                 if style:
                     text = set_ini_value(text, "lcd", "layout", style.split(" ")[0])
