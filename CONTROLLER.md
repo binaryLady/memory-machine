@@ -38,7 +38,7 @@ Works while resting, while rewinding, any time.
 
 ## Sound — the arrows
 
-**The arrows turn through her sounds.** Right or down moves to the next one,
+**The arrows turn through my sounds.** Right or down moves to the next one,
 left or up to the one before; the piece keeps playing under the new
 accompaniment — same picture, same place, new sound — and the deck wraps round
 at either end. Every sound in the media folder is in the deck. (With only one

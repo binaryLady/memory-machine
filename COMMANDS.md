@@ -1097,7 +1097,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `i2c_address` | `0x27` | — |
 | `layout` | `instructions` | — |
 | `page_seconds` | `6` | Seconds each instruction page stays up before the deck turns. |
-| `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and hers underneath. |
+| `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and the piece in the first person underneath ("I play in reverse", "ARROWS: my sounds"). |
 | `page_2` | `*(empty)*` | — |
 | `page_3` | `*(empty)*` | — |
 | `page_4` | `*(empty)*` | — |
