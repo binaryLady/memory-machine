@@ -521,7 +521,7 @@ def run_questions(text: str) -> str:
                 for key, prompt in (
                     ("title", "Title line (up to 18 characters)"),
                     ("label_idle", "Word for at rest"),
-                    ("label_engaged", "Word for listening"),
+                    ("label_engaged", "Word for holding on"),
                     ("label_reward", "Word for the turn (the reward)"),
                     ("label_hello", "Word on waking"),
                     ("label_sleep", "Word overnight"),
@@ -553,6 +553,18 @@ def run_questions(text: str) -> str:
                     )
                 elif icon:
                     text = set_ini_value(text, "lcd", "icon", icon.split(" ")[0])
+
+    # 3e. The second panel — the visitor's instruction card.
+    lcd2 = _ask("Is a second panel connected for the visitor instructions?", ["yes", "no"])
+    if lcd2:
+        text = set_ini_value(text, "lcd2", "enabled", "true" if lcd2 == "yes" else "false")
+        if lcd2 == "yes":
+            address = input("Its I2C address [Enter keeps 0x26]: ").strip()
+            if re.fullmatch(r"0x[0-9a-fA-F]{2}", address or "0x26"):
+                text = set_ini_value(text, "lcd2", "i2c_address", address or "0x26")
+            else:
+                print("That doesn't look like an address; keeping 0x26.")
+                text = set_ini_value(text, "lcd2", "i2c_address", "0x26")
 
     # 4. Sleep hours.
     wants_sleep = _ask("Sleep the piece overnight?", ["yes", "no"])

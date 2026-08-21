@@ -80,6 +80,8 @@ class LcdConfig:
     icon_full: tuple[int, ...] | None
     icon_small: tuple[int, ...] | None
     layout: str
+    page_seconds: float
+    pages: tuple[tuple[str, ...], ...]
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,7 @@ class Config:
     playback: PlaybackConfig
     audio: AudioConfig
     lcd: LcdConfig
+    lcd2: LcdConfig
     sensor: SensorConfig
     gamepad: GamepadConfig
     system: SystemConfig
@@ -171,6 +174,7 @@ class Config:
             ("playback", self.playback),
             ("audio", self.audio),
             ("lcd", self.lcd),
+            ("lcd2", self.lcd2),
             ("sensor", self.sensor),
             ("schedule", self.schedule),
             ("system", self.system),
@@ -216,9 +220,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "idle_bpm": 60.0,
         "engaged_bpm": 100.0,
         "sleep_bpm": 0.0,
-        "title": "memory-machine",
+        "title": "Memory<>Machine",
         "label_idle": "at rest",
-        "label_engaged": "listening",
+        "label_engaged": "holding on",
         "label_reward": "I see you",
         "label_hello": "hello",
         "label_sleep": "goodnight",
@@ -227,6 +231,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "icon_full": "",
         "icon_small": "",
         "layout": "status",
+        "page_seconds": 6.0,
+        "page_1": "",
+        "page_2": "",
+        "page_3": "",
+        "page_4": "",
+        "page_5": "",
+        "page_6": "",
     },
     "sensor": {
         "sensor_type": "gamepad",
@@ -283,13 +294,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
 }
 
+# The second panel — the visitor's instruction card — shares the heartbeat
+# panel's whole vocabulary; only its address and its job differ.
+DEFAULTS["lcd2"] = dict(DEFAULTS["lcd"], i2c_address="0x26", layout="instructions")
+
 _VALID_IDLE_MODES = {"hold_first_frame", "loop_forward", "black"}
 _VALID_REVERSE_RATE = {"native", "fit_to_audio"}
 _VALID_ON_REWIND_END = {"hold", "loop_reverse", "resume_forward"}
 _VALID_MODES = {"production", "test"}
 _VALID_SCALING = {"fit", "fill", "stretch"}
 _VALID_LCD_ICONS = {"heart", "star", "ring", "note", "eye", "none"}
-_VALID_LCD_LAYOUTS = {"status", "art", "show"}
+_VALID_LCD_LAYOUTS = {"status", "art", "show", "instructions"}
 _VALID_ON_AUDIO_END = {"silence", "loop"}
 _VALID_AUDIO_MODE = {"always", "on_lift"}
 _VALID_SENSOR_TYPES = {
@@ -394,6 +409,52 @@ def _parse_panel_text(value: Any, default: str) -> str:
     return text
 
 
+def _parse_pages(raw: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
+    """page_1..page_6 as an instruction deck: pipe-separated lines, up to
+    four per page, each printable ASCII on the full 20 columns."""
+    pages: list[tuple[str, ...]] = []
+    for number in range(1, 7):
+        value = raw.get(f"page_{number}")
+        if value is None or not str(value).strip():
+            continue
+        lines = []
+        for part in str(value).split("|")[:4]:
+            text = "".join(ch for ch in part if 32 <= ord(ch) < 127).strip()
+            if len(text) > 20:
+                LOGGER.warning("Page line %r is longer than 20 columns and will be cut", text)
+                text = text[:20]
+            lines.append(text)
+        if any(lines):
+            pages.append(tuple(lines))
+    return tuple(pages)
+
+
+def _parse_lcd_section(raw: dict[str, Any], section: str) -> LcdConfig:
+    defaults = DEFAULTS[section]
+    return LcdConfig(
+        enabled=_parse_bool(raw.get("enabled"), defaults["enabled"]),
+        i2c_bus=_parse_int(raw.get("i2c_bus"), defaults["i2c_bus"], 0),
+        i2c_address=_parse_i2c_address(raw.get("i2c_address"))
+        or int(str(defaults["i2c_address"]), 0),
+        idle_bpm=_parse_float(raw.get("idle_bpm"), defaults["idle_bpm"], 1.0, 300.0),
+        engaged_bpm=_parse_float(raw.get("engaged_bpm"), defaults["engaged_bpm"], 1.0, 300.0),
+        sleep_bpm=_parse_float(raw.get("sleep_bpm"), defaults["sleep_bpm"], 0.0, 300.0),
+        title=_parse_panel_text(raw.get("title"), defaults["title"]),
+        label_idle=_parse_panel_text(raw.get("label_idle"), defaults["label_idle"]),
+        label_engaged=_parse_panel_text(raw.get("label_engaged"), defaults["label_engaged"]),
+        label_reward=_parse_panel_text(raw.get("label_reward"), defaults["label_reward"]),
+        label_hello=_parse_panel_text(raw.get("label_hello"), defaults["label_hello"]),
+        label_sleep=_parse_panel_text(raw.get("label_sleep"), defaults["label_sleep"]),
+        label_goodbye=_parse_panel_text(raw.get("label_goodbye"), defaults["label_goodbye"]),
+        icon=str(raw.get("icon", defaults["icon"])).strip().lower(),
+        icon_full=_parse_glyph(raw.get("icon_full")),
+        icon_small=_parse_glyph(raw.get("icon_small")),
+        layout=str(raw.get("layout", defaults["layout"])).strip().lower(),
+        page_seconds=_parse_float(raw.get("page_seconds"), defaults["page_seconds"], 1.0, 600.0),
+        pages=_parse_pages(raw),
+    )
+
+
 def _parse_glyph(value: Any) -> tuple[int, ...] | None:
     """A hand-drawn 5x8 glyph: 8 comma-separated row values, each 0-31."""
     if value is None or not str(value).strip():
@@ -482,6 +543,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
     playback_raw = _section("playback")
     audio_raw = _section("audio")
     lcd_raw = _section("lcd")
+    lcd2_raw = _section("lcd2")
     sensor_raw = _section("sensor")
     gamepad_raw = _section("gamepad")
     schedule_raw = _section("schedule")
@@ -516,34 +578,8 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             on_audio_end=str(audio_raw.get("on_audio_end", DEFAULTS["audio"]["on_audio_end"])),
             audio_mode=str(audio_raw.get("audio_mode", DEFAULTS["audio"]["audio_mode"])),
         ),
-        lcd=LcdConfig(
-            enabled=_parse_bool(lcd_raw.get("enabled"), DEFAULTS["lcd"]["enabled"]),
-            i2c_bus=_parse_int(lcd_raw.get("i2c_bus"), DEFAULTS["lcd"]["i2c_bus"], 0),
-            i2c_address=_parse_i2c_address(lcd_raw.get("i2c_address"))
-            or int(str(DEFAULTS["lcd"]["i2c_address"]), 0),
-            idle_bpm=_parse_float(lcd_raw.get("idle_bpm"), DEFAULTS["lcd"]["idle_bpm"], 1.0, 300.0),
-            engaged_bpm=_parse_float(
-                lcd_raw.get("engaged_bpm"), DEFAULTS["lcd"]["engaged_bpm"], 1.0, 300.0
-            ),
-            sleep_bpm=_parse_float(lcd_raw.get("sleep_bpm"), DEFAULTS["lcd"]["sleep_bpm"], 0.0, 300.0),
-            title=_parse_panel_text(lcd_raw.get("title"), DEFAULTS["lcd"]["title"]),
-            label_idle=_parse_panel_text(lcd_raw.get("label_idle"), DEFAULTS["lcd"]["label_idle"]),
-            label_engaged=_parse_panel_text(
-                lcd_raw.get("label_engaged"), DEFAULTS["lcd"]["label_engaged"]
-            ),
-            label_reward=_parse_panel_text(
-                lcd_raw.get("label_reward"), DEFAULTS["lcd"]["label_reward"]
-            ),
-            label_hello=_parse_panel_text(lcd_raw.get("label_hello"), DEFAULTS["lcd"]["label_hello"]),
-            label_sleep=_parse_panel_text(lcd_raw.get("label_sleep"), DEFAULTS["lcd"]["label_sleep"]),
-            label_goodbye=_parse_panel_text(
-                lcd_raw.get("label_goodbye"), DEFAULTS["lcd"]["label_goodbye"]
-            ),
-            icon=str(lcd_raw.get("icon", DEFAULTS["lcd"]["icon"])).strip().lower(),
-            icon_full=_parse_glyph(lcd_raw.get("icon_full")),
-            icon_small=_parse_glyph(lcd_raw.get("icon_small")),
-            layout=str(lcd_raw.get("layout", DEFAULTS["lcd"]["layout"])).strip().lower(),
-        ),
+        lcd=_parse_lcd_section(lcd_raw, "lcd"),
+        lcd2=_parse_lcd_section(lcd2_raw, "lcd2"),
         sensor=SensorConfig(
             sensor_type=str(sensor_raw.get("sensor_type", DEFAULTS["sensor"]["sensor_type"])),
             sensor_combine=str(sensor_raw.get("sensor_combine", DEFAULTS["sensor"]["sensor_combine"])),
@@ -660,28 +696,40 @@ def validate(config: Config) -> list[str]:
             f"playback.scaling must be one of {_VALID_SCALING}; got {config.playback.scaling!r}"
         )
 
-    if config.lcd.icon not in _VALID_LCD_ICONS:
-        art = MEDIA_DIR / "icons" / f"{config.lcd.icon}.txt"
-        if not art.exists():
-            problems.append(
-                f"lcd.icon must be one of {sorted(_VALID_LCD_ICONS)} or name a "
-                f"pixel-art file; got {config.lcd.icon!r} and {art} does not exist"
-            )
-        else:
-            import lcd
+    for section, panel in (("lcd", config.lcd), ("lcd2", config.lcd2)):
+        if panel.icon not in _VALID_LCD_ICONS:
+            art = MEDIA_DIR / "icons" / f"{panel.icon}.txt"
+            if not art.exists():
+                problems.append(
+                    f"{section}.icon must be one of {sorted(_VALID_LCD_ICONS)} or name a "
+                    f"pixel-art file; got {panel.icon!r} and {art} does not exist"
+                )
+            else:
+                import lcd
 
-            try:
-                lcd.parse_icon_art(art.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as exc:
-                problems.append(f"lcd.icon art {art} cannot be used: {exc}")
-    if config.lcd.layout not in _VALID_LCD_LAYOUTS:
+                try:
+                    lcd.parse_icon_art(art.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    problems.append(f"{section}.icon art {art} cannot be used: {exc}")
+        if panel.layout not in _VALID_LCD_LAYOUTS:
+            problems.append(
+                f"{section}.layout must be one of {sorted(_VALID_LCD_LAYOUTS)}; got {panel.layout!r}"
+            )
+        if (panel.icon_full is None) != (panel.icon_small is None):
+            problems.append(
+                f"{section}.icon_full and {section}.icon_small come as a pair — the icon "
+                "needs both its full and its relaxed shape to beat"
+            )
+    if (
+        config.lcd.enabled
+        and config.lcd2.enabled
+        and (config.lcd.i2c_bus, config.lcd.i2c_address)
+        == (config.lcd2.i2c_bus, config.lcd2.i2c_address)
+    ):
         problems.append(
-            f"lcd.layout must be one of {sorted(_VALID_LCD_LAYOUTS)}; got {config.lcd.layout!r}"
-        )
-    if (config.lcd.icon_full is None) != (config.lcd.icon_small is None):
-        problems.append(
-            "lcd.icon_full and lcd.icon_small come as a pair — the icon needs "
-            "both its full and its relaxed shape to beat"
+            f"lcd and lcd2 both claim bus {config.lcd.i2c_bus} address "
+            f"0x{config.lcd.i2c_address:02X} — two panels need two addresses "
+            "(jumper the second backpack, usually to 0x26)"
         )
 
     dm = config.playback.display_mode

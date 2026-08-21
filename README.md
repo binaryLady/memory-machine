@@ -206,8 +206,14 @@ enabled             = false            ; 20x4 I2C character panel
 i2c_bus             = 1
 i2c_address         = 0x27
 idle_bpm            = 60               ; heart rate at rest
-engaged_bpm         = 100              ; heart rate while listening
+engaged_bpm         = 100              ; heart rate while a visitor holds on
 sleep_bpm           = 0                ; overnight; 0 = still heart
+
+[lcd2]
+enabled             = false            ; second panel: the visitor's rotating
+                                       ; instruction card (see COMMANDS.md)
+i2c_address         = 0x26
+page_seconds        = 6                ; how long each page stays up
 
 [sensor]
 sensor_type         = capacitive       ; switch | reed | beam | reflective |

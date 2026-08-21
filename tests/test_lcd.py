@@ -27,10 +27,15 @@ def test_the_first_column_is_left_for_the_heart() -> None:
 
 def test_state_reads_as_the_piece_rather_than_the_machine() -> None:
     at_rest = lcd.format_rows("IDLE", 0.0, 0.0, 0, 0)[1]
-    listening = lcd.format_rows("ENGAGED", 0.0, 0.0, 0, 0)[1]
+    holding = lcd.format_rows("ENGAGED", 0.0, 0.0, 0, 0)[1]
 
     assert "at rest" in at_rest
-    assert "listening" in listening
+    assert "holding on" in holding
+
+
+def test_the_counter_speaks_the_pad_era() -> None:
+    """The interaction is holding a button now, not lifting headphones."""
+    assert "holds" in lcd.format_rows("IDLE", 0.0, 0.0, 3, 0)[3]
 
 
 def test_uptime_switches_to_days_when_it_is_long() -> None:
@@ -97,9 +102,9 @@ def test_the_panel_says_hello_for_a_few_seconds_after_waking() -> None:
     assert lcd.state_label("IDLE", seconds_since_wake=6.0) == "at rest"
 
 
-def test_listening_beats_hello_when_someone_lifts_at_opening() -> None:
-    """A visitor at 8:01 should see 'listening', not a leftover greeting."""
-    assert lcd.state_label("ENGAGED", seconds_since_wake=2.0) == "listening"
+def test_holding_beats_hello_when_someone_holds_at_opening() -> None:
+    """A visitor at 8:01 should see 'holding on', not a leftover greeting."""
+    assert lcd.state_label("ENGAGED", seconds_since_wake=2.0) == "holding on"
 
 
 def test_the_heart_is_still_when_sleep_bpm_is_zero() -> None:
@@ -414,6 +419,66 @@ def test_show_stars_swap_with_the_beat() -> None:
     shown_relax, hidden_relax = lcd.show_stars("calm", full=False)
 
     assert shown_full == hidden_relax and hidden_full == shown_relax
+
+
+def test_instruction_rows_fit_the_panel_exactly() -> None:
+    for index in range(len(lcd.DEFAULT_INSTRUCTION_PAGES)):
+        rows = lcd.instruction_rows(lcd.DEFAULT_INSTRUCTION_PAGES, index)
+        assert len(rows) == lcd.ROWS
+        assert all(len(row) == lcd.COLUMNS for row in rows)
+
+
+def test_instruction_rows_truncate_rather_than_overflow() -> None:
+    pages = (("x" * 40, "y" * 40),)
+    rows = lcd.instruction_rows(pages, 0)
+
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+    assert rows[2].strip() == "" and rows[3].strip() == "", "a short page pads with blank rows"
+
+
+def test_instruction_title_row_leaves_the_icon_margin() -> None:
+    rows = lcd.instruction_rows((("Memory<>Machine", "hello"),), 0)
+
+    assert rows[0][:2] == "  ", "the icon owns the title row's left edge"
+    assert rows[0].strip() == "Memory<>Machine"
+
+
+def test_every_shipped_page_speaks_hardware_ascii() -> None:
+    """The A00 ROM garbles anything past printable ASCII on the glass."""
+    for page in lcd.DEFAULT_INSTRUCTION_PAGES:
+        assert page[0] == "Memory<>Machine", "her name leads every page"
+        assert len(page) <= lcd.ROWS
+        for line in page:
+            assert all(32 <= ord(ch) < 127 for ch in line), line
+            assert len(line) <= lcd.COLUMNS, line
+
+
+def test_the_deck_turns_and_wraps() -> None:
+    assert lcd.page_index(0.0, 6.0, 5) == 0
+    assert lcd.page_index(6.5, 6.0, 5) == 1
+    assert lcd.page_index(29.0, 6.0, 5) == 4
+    assert lcd.page_index(30.0, 6.0, 5) == 0
+    assert lcd.page_index(5.9, 6.0, 5) == 0, "stable within a page's window"
+
+
+def test_the_deck_survives_nonsense_timing() -> None:
+    assert lcd.page_index(100.0, 0.0, 5) == 0
+    assert lcd.page_index(100.0, 6.0, 0) == 0
+    assert lcd.page_index(-3.0, 6.0, 5) == 0
+
+
+def test_instruction_pages_prefer_the_operators_deck() -> None:
+    own = (("her words", "her lines"),)
+    assert lcd.instruction_pages(_LcdStub(pages=own)) == own
+    assert lcd.instruction_pages(_LcdStub(pages=())) == lcd.DEFAULT_INSTRUCTION_PAGES
+
+
+def test_instruction_stars_stay_past_a_centered_title() -> None:
+    rows = lcd.instruction_rows(lcd.DEFAULT_INSTRUCTION_PAGES, 0)
+    for cells in lcd.INSTRUCTION_STARS:
+        for row, col in cells:
+            assert rows[row][col] == " ", "a star must not land on the title"
+            assert 0 <= row < lcd.ROWS and 0 <= col < lcd.COLUMNS
 
 
 def test_show_stars_avoid_the_title_and_the_centered_icon() -> None:
