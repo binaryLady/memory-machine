@@ -1139,7 +1139,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `i2c_address` | `0x27` | — |
 | `layout` | `instructions` | — |
 | `page_seconds` | `6` | Seconds each instruction page stays up before the deck turns. |
-| `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and the piece in the first person underneath, in the language of observation ("I am every moment / until you look", "we are entangled: / I run backward", "let go: I collapse"). Setting any page replaces the whole shipped deck, so write every page you want shown. |
+| `page_1` | `*(empty)*` | The pages, page_1 .. page_6. Up to four lines per page separated by \|, each up to 20 printable ASCII columns. Left empty, the shipped deck speaks: her name on every page, the controls in the operator's words — HOLD START, A or B, ARROWS — and the portrait in the first person underneath ("looking is measuring / I begin to forget", "you can only see me / by unmaking me"). Setting any page replaces the whole shipped deck, so write every page you want shown. |
 | `page_2` | `*(empty)*` | — |
 | `page_3` | `*(empty)*` | — |
 | `page_4` | `*(empty)*` | — |
