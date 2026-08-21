@@ -273,7 +273,8 @@ piece rewinds; **A or B** switches the picture to its kaleidoscope twin; the
 one. `motion-player-sensor --fit` finds the pad and writes `gamepad` / `closed`
 together, and `--probe` prints the name and number of whatever you press, which
 is how a pad that numbers its buttons differently gets corrected. See
-COMMANDS.md for the whole control map and the touch pad's header pins.
+COMMANDS.md for the whole control map and the touch pad's header pins,
+and CONTROLLER.md for the visitor-facing instruction card.
 
 | sensor_type  | Hardware                       | Notes                                                |
 | ------------ | ------------------------------ | ---------------------------------------------------- |
