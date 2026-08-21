@@ -160,6 +160,47 @@ def apply_render_choice(text: str, renders: list[str], picks: list[int]) -> str:
     return text
 
 
+# The sensor choices the wizard offers. Each label must lead with the config
+# value — the caller takes the first token. engaged_when is per-backend and is
+# the subtle one: a touch pad is engaged when its contact CLOSES, but a cradle
+# switch is lifted when its contact OPENS, so one shared default silently
+# inverts whichever it was not written for.
+SENSOR_CHOICES: list[tuple[str, str | None, bool, str | None, str]] = [
+    # (value, engaged_when, sets_pin, i2c_address, label)
+    ("capacitive", "closed", False, "0x5a", "capacitive (touch pad, MPR121 over I2C) - what the show uses"),
+    ("gpio_raw", "closed", True, None, "gpio_raw (touch pad or any digital module on GPIO 4)"),
+    ("switch", "open", True, None, "switch (headphone cradle on GPIO 4)"),
+    ("mmwave", "open", True, None, "mmwave (24GHz radar presence pin)"),
+    ("keyboard", None, False, None, "keyboard (spacebar, for testing)"),
+    ("none", None, False, None, "none (loop forever, no rewind)"),
+]
+
+
+def sensor_labels() -> list[str]:
+    return [label for *_rest, label in SENSOR_CHOICES]
+
+
+def apply_sensor_choice(text: str, sensor_type: str) -> str:
+    """Write one sensor choice, with the polarity and address that go with it.
+
+    sensor.i2c_address is one key read by whichever backend sensor_type names —
+    the MPR121 at 0x5a, the VL53L0X at 0x29 — so it has to move with the sensor
+    or the pad is looked for at the range-finder's address.
+    """
+    for value, polarity, sets_pin, address, _label in SENSOR_CHOICES:
+        if value != sensor_type:
+            continue
+        text = set_ini_value(text, "sensor", "sensor_type", value)
+        if polarity is not None:
+            text = set_ini_value(text, "sensor", "engaged_when", polarity)
+        if sets_pin:
+            text = set_ini_value(text, "sensor", "gpio_pin", "4")
+        if address is not None:
+            text = set_ini_value(text, "sensor", "i2c_address", address)
+        return text
+    return text
+
+
 def sanitize_setup_name(raw: str) -> str | None:
     """A setup name as a safe filename stem, or None if nothing usable remains.
 
@@ -354,101 +395,13 @@ def _restart_service() -> None:
     print("Restarted.")
 
 
-def main() -> int:
-    # Listing and saving read the world-readable config and write to the
-    # operator's own media folder — neither needs root, so they run before
-    # the sudo re-exec.
-    if "--list-setups" in sys.argv:
-        for name in list_setups(setups_dir()):
-            print(name)
-        return 0
+def run_questions(text: str) -> str:
+    """Ask every configuration question and return the edited config text.
 
-    if "--save-setup" in sys.argv:
-        args = sys.argv[1:]
-        if len(args) != 2 or args[0] != "--save-setup":
-            print("Usage: motion-player-setup --save-setup NAME")
-            return 2
-        name = sanitize_setup_name(args[1])
-        if not name:
-            print(f"Unusable setup name: {args[1]!r}")
-            return 2
-        if not CONFIG_PATH.exists():
-            print(f"No config at {CONFIG_PATH} to save.")
-            return 1
-        print(f"Saved setup: {save_setup(CONFIG_PATH.read_text(encoding='utf-8'), name)}")
-        return 0
-
-    if os.geteuid() != 0:
-        print("The config file is root-owned; re-running under sudo.")
-        os.execvp("sudo", ["sudo", sys.executable] + sys.argv)
-
-    if "--load-setup" in sys.argv:
-        args = sys.argv[1:]
-        if len(args) != 2 or args[0] != "--load-setup":
-            print("Usage: motion-player-setup --load-setup NAME")
-            return 2
-        name = sanitize_setup_name(args[1])
-        if not name:
-            print(f"Unusable setup name: {args[1]!r}")
-            return 2
-        return load_setup(name)
-
-    if "--set" in sys.argv:
-        args = sys.argv[1:]
-        values = [args[i + 1] for i, arg in enumerate(args)
-                  if arg == "--set" and i + 1 < len(args)]
-        leftovers = [arg for i, arg in enumerate(args)
-                     if arg != "--set" and (i == 0 or args[i - 1] != "--set")]
-        if leftovers or len(values) != args.count("--set"):
-            print("Usage: motion-player-setup [--set section.key=value ...]")
-            return 2
-        try:
-            pairs = parse_set_args(values)
-        except ValueError as exc:
-            print(exc)
-            return 2
-        return apply_settings(pairs)
-
-    source = CONFIG_PATH if CONFIG_PATH.exists() else PACKAGED_DEFAULT
-    if not source.exists():
-        print(f"No config found at {CONFIG_PATH} or {PACKAGED_DEFAULT}.")
-        return 1
-    text = source.read_text(encoding="utf-8")
-
-    print("memory-machine setup")
-    print("====================")
-
-    # 0. Which run? Every saved setup is its own numbered option, so the
-    # first question setup asks is the one that matters. Duplication is a
-    # workflow, not a button: load, walk the questions to tweak, save under
-    # the new name at the end.
-    saved = list_setups(setups_dir())
-    action = _ask("Which run does this Pi play?", setup_menu(saved))
-    picked = menu_choice_setup_name(action)
-    if picked:
-        code = load_setup(picked)
-        if code != 0:
-            return code
-        if input("\nWalk through the questions to tweak it? [y/N]: ").strip().lower() != "y":
-            return 0
-        text = CONFIG_PATH.read_text(encoding="utf-8")
-    elif action and action.startswith("save"):
-        name = sanitize_setup_name(input("Name for this setup: ").strip())
-        if not name:
-            print("That name had nothing usable in it; nothing saved.")
-            return 2
-        print(f"Saved setup: {save_setup(text, name)}")
-        return 0
-    elif action and action.startswith("duplicate"):
-        pick = _ask("Duplicate which setup?", saved)
-        if not pick:
-            return 0
-        name = sanitize_setup_name(input("New name: ").strip())
-        if not name:
-            print("That name had nothing usable in it; nothing duplicated.")
-            return 2
-        return duplicate_setup(pick, name)
-
+    Pure with respect to the filesystem: it reads no file and writes none, so
+    the wizard's smoke test — Enter through everything and the config must come
+    back byte-identical — is a test rather than an instruction.
+    """
     # 1. What is attached.
     screens = detected_screens()
     if screens:
@@ -492,16 +445,18 @@ def main() -> int:
             break
 
     # 3. Sensor.
-    sensor = _ask(
-        "What starts the piece?",
-        ["switch (headphone sensor on GPIO 4)", "keyboard (spacebar, for testing)",
-         "none (loop forever, no rewind)"],
-    )
+    sensor = _ask("What starts the piece?", sensor_labels())
     if sensor:
-        sensor_type = sensor.split(" ")[0]
-        text = set_ini_value(text, "sensor", "sensor_type", sensor_type)
-        if sensor_type == "switch":
-            text = set_ini_value(text, "sensor", "gpio_pin", "4")
+        text = apply_sensor_choice(text, sensor.split(" ")[0])
+
+    # 3a. Whether the sound is tied to that sensor at all.
+    sound = _ask(
+        "When does the sound play?",
+        ["always (it loops from boot; the sensor drives only the picture)",
+         "on_lift (it starts when someone engages the sensor, and fades when they let go)"],
+    )
+    if sound:
+        text = set_ini_value(text, "audio", "audio_mode", sound.split(" ")[0])
 
     # 3b. Audio sink: pin it, so audio can never wander to a screen's speakers.
     # SDL's enumeration can miss a card the kernel sees (the USB adapter, on
@@ -627,6 +582,106 @@ def main() -> int:
             soak = input("\nStop automatically after N seconds? [Enter = run until quit]: ").strip()
             if soak.isdigit() and int(soak) > 0:
                 text = set_ini_value(text, "system", "exit_after_s", soak)
+
+    return text
+
+
+def main() -> int:
+    # Listing and saving read the world-readable config and write to the
+    # operator's own media folder — neither needs root, so they run before
+    # the sudo re-exec.
+    if "--list-setups" in sys.argv:
+        for name in list_setups(setups_dir()):
+            print(name)
+        return 0
+
+    if "--save-setup" in sys.argv:
+        args = sys.argv[1:]
+        if len(args) != 2 or args[0] != "--save-setup":
+            print("Usage: motion-player-setup --save-setup NAME")
+            return 2
+        name = sanitize_setup_name(args[1])
+        if not name:
+            print(f"Unusable setup name: {args[1]!r}")
+            return 2
+        if not CONFIG_PATH.exists():
+            print(f"No config at {CONFIG_PATH} to save.")
+            return 1
+        print(f"Saved setup: {save_setup(CONFIG_PATH.read_text(encoding='utf-8'), name)}")
+        return 0
+
+    if os.geteuid() != 0:
+        print("The config file is root-owned; re-running under sudo.")
+        os.execvp("sudo", ["sudo", sys.executable] + sys.argv)
+
+    if "--load-setup" in sys.argv:
+        args = sys.argv[1:]
+        if len(args) != 2 or args[0] != "--load-setup":
+            print("Usage: motion-player-setup --load-setup NAME")
+            return 2
+        name = sanitize_setup_name(args[1])
+        if not name:
+            print(f"Unusable setup name: {args[1]!r}")
+            return 2
+        return load_setup(name)
+
+    if "--set" in sys.argv:
+        args = sys.argv[1:]
+        values = [args[i + 1] for i, arg in enumerate(args)
+                  if arg == "--set" and i + 1 < len(args)]
+        leftovers = [arg for i, arg in enumerate(args)
+                     if arg != "--set" and (i == 0 or args[i - 1] != "--set")]
+        if leftovers or len(values) != args.count("--set"):
+            print("Usage: motion-player-setup [--set section.key=value ...]")
+            return 2
+        try:
+            pairs = parse_set_args(values)
+        except ValueError as exc:
+            print(exc)
+            return 2
+        return apply_settings(pairs)
+
+    source = CONFIG_PATH if CONFIG_PATH.exists() else PACKAGED_DEFAULT
+    if not source.exists():
+        print(f"No config found at {CONFIG_PATH} or {PACKAGED_DEFAULT}.")
+        return 1
+    text = source.read_text(encoding="utf-8")
+
+    print("memory-machine setup")
+    print("====================")
+
+    # 0. Which run? Every saved setup is its own numbered option, so the
+    # first question setup asks is the one that matters. Duplication is a
+    # workflow, not a button: load, walk the questions to tweak, save under
+    # the new name at the end.
+    saved = list_setups(setups_dir())
+    action = _ask("Which run does this Pi play?", setup_menu(saved))
+    picked = menu_choice_setup_name(action)
+    if picked:
+        code = load_setup(picked)
+        if code != 0:
+            return code
+        if input("\nWalk through the questions to tweak it? [y/N]: ").strip().lower() != "y":
+            return 0
+        text = CONFIG_PATH.read_text(encoding="utf-8")
+    elif action and action.startswith("save"):
+        name = sanitize_setup_name(input("Name for this setup: ").strip())
+        if not name:
+            print("That name had nothing usable in it; nothing saved.")
+            return 2
+        print(f"Saved setup: {save_setup(text, name)}")
+        return 0
+    elif action and action.startswith("duplicate"):
+        pick = _ask("Duplicate which setup?", saved)
+        if not pick:
+            return 0
+        name = sanitize_setup_name(input("New name: ").strip())
+        if not name:
+            print("That name had nothing usable in it; nothing duplicated.")
+            return 2
+        return duplicate_setup(pick, name)
+
+    text = run_questions(text)
 
     code = _finish(text)
     if sys.stdin.isatty():

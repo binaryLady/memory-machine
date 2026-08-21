@@ -10,6 +10,7 @@ import motion_test
 @dataclass
 class FakeAudioCfg:
     fade_out_ms: int = 400
+    audio_mode: str = "on_lift"
 
 
 @dataclass

@@ -132,6 +132,21 @@ class AudioEngine:
         self._sound.play(maxtime=maxtime)
         LOGGER.debug("Audio started from start (maxtime=%dms)", maxtime)
 
+    def play_looping(self) -> None:
+        """Play the sound end to end, for ever.
+
+        Used when the sound is not tied to the sensor: it starts at boot and
+        the sensor drives only the picture. No maxtime here — the cap exists to
+        stop the audio outlasting the picture, and there is no picture to
+        outlast when the sound is the constant.
+        """
+        if self._sound is None:
+            return
+        self._sound.stop()
+        self._sound.set_volume(self._volume)
+        self._sound.play(loops=-1)
+        LOGGER.info("Audio looping continuously (audio_mode=always)")
+
     def fade_out(self, ms: int) -> None:
         if self._sound is None:
             return
@@ -149,3 +164,30 @@ class AudioEngine:
     @property
     def resolved_sink(self) -> str:
         return self._resolved_sink
+
+
+class AlwaysOnAudio:
+    """An AudioEngine that ignores being started and stopped.
+
+    When audio_mode is "always" the sound is already looping and the sensor
+    drives only the picture, but the state machine still calls play_from_start
+    on every lift and fade_out on every release. Swallowing those two here
+    keeps state.py free of a mode it does not otherwise care about.
+    """
+
+    def __init__(self, engine: Any) -> None:
+        self._engine = engine
+
+    def play_from_start(self) -> None:
+        pass
+
+    def fade_out(self, ms: int) -> None:
+        pass
+
+    @property
+    def is_playing(self) -> bool:
+        return self._engine.is_playing
+
+    @property
+    def duration_s(self) -> float:
+        return self._engine.duration_s

@@ -1,9 +1,19 @@
 """Setup wizard tests: the pure config-editing helpers and the --set path."""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
-from setup_wizard import parse_set_args, render_prepare_hint, set_ini_value
+import setup_wizard
+from setup_wizard import (
+    apply_sensor_choice,
+    parse_set_args,
+    render_prepare_hint,
+    run_questions,
+    set_ini_value,
+)
 
 SAMPLE = """; the shipped comment survives edits
 [playback]
@@ -356,3 +366,100 @@ def test_picking_a_run_from_the_menu_plays_that_run(tmp_path, monkeypatch) -> No
     live = config.read_text(encoding="utf-8")
     assert live == gallery_b, "the chosen run's config, byte for byte"
     assert "keyboard" in live and "fill" not in live, "not the other setup"
+
+
+FULL_CONFIG = """[media]
+video_file          = piece.mp4
+
+[playback]
+scaling             = fit
+
+[sensor]
+sensor_type         = switch
+engaged_when        = open
+gpio_pin            = 4
+
+[audio]
+audio_sink          = USB
+audio_mode          = always
+
+[lcd]
+enabled             = false
+
+[schedule]
+enabled             = false
+
+[telemetry]
+enabled             = false
+
+[system]
+mode                = production
+"""
+
+
+def test_apply_sensor_choice_sets_the_polarity_a_touch_pad_needs() -> None:
+    result = apply_sensor_choice(FULL_CONFIG, "capacitive")
+
+    assert "sensor_type         = capacitive" in result
+    # A pad is engaged when its contact closes; left on "open" the piece would
+    # run whenever nobody is touching it.
+    assert "engaged_when        = closed" in result
+
+
+def test_apply_sensor_choice_sets_the_polarity_a_cradle_switch_needs() -> None:
+    result = apply_sensor_choice(apply_sensor_choice(FULL_CONFIG, "capacitive"), "switch")
+
+    assert "sensor_type         = switch" in result
+    assert "engaged_when        = open" in result
+    assert "gpio_pin            = 4" in result
+
+
+def test_apply_sensor_choice_leaves_pin_and_polarity_alone_for_the_pinless_backends() -> None:
+    for sensor_type in ("keyboard", "none"):
+        result = apply_sensor_choice(FULL_CONFIG, sensor_type)
+
+        assert f"sensor_type         = {sensor_type}" in result
+        assert "engaged_when        = open" in result, "polarity is meaningless here"
+
+
+def test_apply_sensor_choice_ignores_a_backend_it_does_not_offer() -> None:
+    assert apply_sensor_choice(FULL_CONFIG, "not-a-sensor") == FULL_CONFIG
+
+
+def test_every_offered_sensor_is_a_backend_the_config_accepts() -> None:
+    import config as config_module
+
+    for value, _polarity, _pin, _address, label in setup_wizard.SENSOR_CHOICES:
+        assert value in config_module._VALID_SENSOR_TYPES
+        assert label.split(" ")[0] == value, "the caller takes the first token"
+
+
+def test_pressing_enter_through_every_question_returns_the_config_untouched(monkeypatch) -> None:
+    """HANDOFF's wizard smoke test, as a test rather than an instruction."""
+    monkeypatch.setattr("builtins.input", lambda *_args: "")
+    monkeypatch.setattr(setup_wizard, "detected_screens", lambda: [])
+    monkeypatch.setattr(setup_wizard, "audio_device_names", lambda: [])
+    monkeypatch.setattr(setup_wizard, "discover_renders", lambda _d: [])
+
+    assert run_questions(FULL_CONFIG) == FULL_CONFIG
+
+
+def test_apply_sensor_choice_points_the_pad_at_its_own_i2c_address() -> None:
+    # One key, two backends: the MPR121 lives at 0x5a and the VL53L0X at 0x29,
+    # so leaving the range-finder's address behind hides the pad completely.
+    ranged = set_ini_value(FULL_CONFIG, "sensor", "i2c_address", "0x29")
+
+    result = apply_sensor_choice(ranged, "capacitive")
+
+    assert re.search(r"i2c_address\s*=\s*0x5a", result)
+    assert "0x29" not in result
+
+
+def test_the_packaged_ini_points_at_the_sensor_it_ships_with() -> None:
+    import config as config_module
+
+    cfg = config_module.load(str(Path(__file__).resolve().parent.parent
+                                 / "config" / "config.default.ini"))
+
+    assert cfg.sensor.sensor_type == "capacitive"
+    assert cfg.sensor.i2c_address == 0x5A, "the MPR121's address, not the ToF's"

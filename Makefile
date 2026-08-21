@@ -32,6 +32,7 @@ lint:
 	bash -n packaging/build_deb.sh
 	bash -n packaging/motion-player-launcher
 	bash -n packaging/motion-player-toggle
+	bash -n packaging/motion-player-sensor
 	bash -n packaging/motion-player-media
 	bash -n packaging/motion-player-reverse
 	bash -n packaging/motion-player-install-deb
