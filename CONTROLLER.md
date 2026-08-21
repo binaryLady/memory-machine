@@ -38,10 +38,11 @@ Works while resting, while rewinding, any time.
 
 ## Sound — the arrows
 
-**Each arrow chooses a sound.** Press one and the piece keeps playing under a
-different accompaniment — same picture, same place, new sound. Press another
-arrow to change again. (An arrow does nothing until a sound has been given to
-it in the configuration; out of the box the arrows are quiet.)
+**The arrows turn through her sounds.** Right or down moves to the next one,
+left or up to the one before; the piece keeps playing under the new
+accompaniment — same picture, same place, new sound — and the deck wraps round
+at either end. Every sound in the media folder is in the deck. (With only one
+sound there, the arrows do nothing.)
 
 ## Nothing to get wrong
 
@@ -57,7 +58,7 @@ it in the configuration; out of the box the arrows are quiet.)
 | --- | --- | --- |
 | Start, Select | hold to rewind | `[gamepad] hold = start+select` |
 | A, B | kaleidoscope on/off | `[gamepad] kaleidoscope = a+b` |
-| ▲ ▼ ◀ ▶ | one sound each | `[gamepad] audio_up = …` etc., empty = off |
+| ▶ ▼ / ◀ ▲ | next sound / previous sound | `[gamepad] audio_next = right+down`, `audio_prev = left+up` |
 
 The pad reports buttons as numbers and pads disagree about which is which.
 The shipped numbers are `a = 1`, `b = 0`, `select = 2`, `start = 3`. To check

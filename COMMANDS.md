@@ -860,7 +860,8 @@ section gives each a job:
 | --- | --- | --- |
 | `hold` | `start+select` | held to wind the piece back — the interaction itself. `any` means any button, which suits a pad that does nothing else. |
 | `kaleidoscope` | `a+b` | switches the picture between the plain render and its kaleidoscope twin |
-| `audio_up`, `audio_down`, `audio_left`, `audio_right` | empty | one sound per arrow, chosen live while the piece runs |
+| `audio_next` | `right+down` | turns to the next sound in the media folder — every `.wav` and `.mp3` beside `media.audio_file`, in name order, wrapping at the end |
+| `audio_prev` | `left+up` | the same deck, turned the other way |
 
 A control can only hold **or** do something else — if A toggles the
 kaleidoscope, A cannot also be the rewind.
@@ -1132,12 +1133,10 @@ description, edit the comments in `config/config.default.ini` and run
 | `down` | `*(empty)*` | — |
 | `left` | `*(empty)*` | — |
 | `right` | `*(empty)*` | — |
-| `hold` | `start+select` | What the controls do. Names: a, b, select, start, up, down, left, right — joined with + for more than one, empty to switch the job off. hold          held to wind the piece back: the interaction itself. "any" means any button, which suits a pad that does nothing else. kaleidoscope  switches the picture between the plain render and its kaleidoscope twin (see media.kaleidoscope_file). |
+| `hold` | `start+select` | What the controls do. Names: a, b, select, start, up, down, left, right — joined with + for more than one, empty to switch the job off. hold          held to wind the piece back: the interaction itself. "any" means any button, which suits a pad that does nothing else. kaleidoscope  switches the picture between the plain render and its kaleidoscope twin (see media.kaleidoscope_file). audio_next    turns to the next sound in the media folder — every .wav audio_prev    and .mp3 beside media.audio_file, in name order, wrapping at the ends. One sound in the folder means nowhere to turn. |
 | `kaleidoscope` | `a+b` | — |
-| `audio_up` | `*(empty)*` | One sound per arrow, chosen live while the piece runs. Paths as in [media]; an empty one means that arrow changes nothing. |
-| `audio_down` | `*(empty)*` | — |
-| `audio_left` | `*(empty)*` | — |
-| `audio_right` | `*(empty)*` | — |
+| `audio_next` | `right+down` | — |
+| `audio_prev` | `left+up` | — |
 
 ### `[schedule]`
 

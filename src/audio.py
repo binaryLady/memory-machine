@@ -8,6 +8,34 @@ from typing import Any
 
 LOGGER = logging.getLogger("motion-player.audio")
 
+_SOUND_SUFFIXES = {".wav", ".mp3"}
+
+
+def sound_library(folder: Path) -> list[Path]:
+    """Every sound in the folder, in name order — the deck the arrows turn through."""
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        return []
+    return sorted(p for p in entries if p.is_file() and p.suffix.lower() in _SOUND_SUFFIXES)
+
+
+def neighbour_sound(library: list[Path], current: Path, step: int) -> Path | None:
+    """The sound `step` places along from the current one, wrapping at the ends.
+
+    A current sound that is not in the library (renamed, or an absolute path
+    elsewhere) starts the cycle from the top. One sound, or none, means there
+    is nowhere to go.
+    """
+    if not library:
+        return None
+    if current in library:
+        index = library.index(current)
+        candidate = library[(index + step) % len(library)]
+    else:
+        candidate = library[0] if step >= 0 else library[-1]
+    return None if candidate == current else candidate
+
 # Suppress the startup banner that pygame prints to stdout/stderr.
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
@@ -187,6 +215,18 @@ class AudioEngine:
         LOGGER.info("Audio switched to %s", self._audio_path.name)
         return True
 
+    def cycle(self, step: int) -> bool:
+        """Move to the next (or previous) sound in the media folder."""
+        target = neighbour_sound(sound_library(self._audio_path.parent), self._audio_path, step)
+        if target is None:
+            LOGGER.info("No other sound beside %s to cycle to", self._audio_path.name)
+            return False
+        return self.switch_to(target)
+
+    @property
+    def audio_path(self) -> Path:
+        return self._audio_path
+
     @property
     def is_playing(self) -> bool:
         return bool(self._pygame.mixer.get_busy())
@@ -221,6 +261,13 @@ class AlwaysOnAudio:
     def switch_to(self, path: Any) -> bool:
         """Choosing a different sound is not the state machine starting one."""
         return self._engine.switch_to(path)
+
+    def cycle(self, step: int) -> bool:
+        return self._engine.cycle(step)
+
+    @property
+    def audio_path(self) -> Path:
+        return self._engine.audio_path
 
     @property
     def is_playing(self) -> bool:

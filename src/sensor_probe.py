@@ -108,8 +108,6 @@ def format_report(sensor_cfg: dict[str, Any], audio_cfg: dict[str, Any],
         out.append(f"  device        {sensor_cfg.get('gamepad_device', 'auto')}")
         for job, controls in (sensor_cfg.get("gamepad_jobs") or {}).items():
             out.append(f"  {job:<13} {'+'.join(controls) or 'nothing'}")
-        for direction, path in (sensor_cfg.get("gamepad_audio") or {}).items():
-            out.append(f"  audio {direction:<7} {Path(path).name}")
     else:
         out.append(f"  gpio_pin      {sensor_cfg.get('gpio_pin', '?')}"
                    f"  pull_up {sensor_cfg.get('pull_up', '?')}")
@@ -224,7 +222,6 @@ def report() -> int:
         "touch_channel": cfg.sensor.touch_channel,
         "gamepad_device": cfg.sensor.gamepad_device,
         "gamepad_jobs": cfg.gamepad.jobs,
-        "gamepad_audio": cfg.gamepad.audio,
         "gamepad_numbers": cfg.gamepad.numbers,
         "i2c_bus": 1,
     }

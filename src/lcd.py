@@ -70,7 +70,7 @@ DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
     ("Memory<>Machine", "PLAYER DETECTED", "she is watching", "you, watching her"),
     ("Memory<>Machine", "HOLD START or SELECT", "she plays in reverse", "let go: she returns"),
     ("Memory<>Machine", "stay to the start", "and she turns", "to face you"),
-    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: her sounds", "one voice each"),
+    ("Memory<>Machine", "A or B: kaleidoscope", "ARROWS: her sounds", "turn the deck"),
     ("Memory<>Machine", "observed as object", "or understood?", "NO WRONG MOVES"),
 )
 

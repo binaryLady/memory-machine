@@ -138,9 +138,6 @@ class GamepadSensor(Sensor):
         self._configured = config.gamepad_device
         self._numbers = dict(getattr(gamepad, "numbers", None) or _DEFAULT_NUMBERS)
         self._jobs = dict(getattr(gamepad, "jobs", None) or _DEFAULT_JOBS)
-        # An arrow with a sound behind it is a job like any other; the engine
-        # is told which one by name.
-        self._audio_controls = set(getattr(gamepad, "audio", None) or ())
         self._held: set[str] = set()
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -219,8 +216,6 @@ class GamepadSensor(Sensor):
             for job in jobs:
                 if job != "hold":
                     self._emit_action(job)
-            if control in self._audio_controls:
-                self._emit_action(f"audio_{control}")
 
     def _apply_hold(self, control: str, pressed: bool) -> None:
         with self._lock:
