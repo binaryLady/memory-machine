@@ -212,7 +212,8 @@ sleep_bpm           = 0                ; overnight; 0 = still heart
 [lcd2]
 enabled             = false            ; second panel: the visitor's rotating
                                        ; instruction card (see COMMANDS.md)
-i2c_address         = 0x26
+i2c_bus             = 3                ; second hardware bus; needs the
+                                       ; i2c3-pi5 overlay (see COMMANDS.md)
 page_seconds        = 6                ; how long each page stays up
 
 [sensor]

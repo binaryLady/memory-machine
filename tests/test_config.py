@@ -179,8 +179,8 @@ def test_the_second_panel_ships_as_the_instruction_card(tmp_path: Path) -> None:
     cfg = config.load(path)
 
     assert cfg.lcd2.enabled is False
-    assert cfg.lcd2.i2c_address == 0x26
-    assert cfg.lcd2.i2c_bus == 1
+    assert cfg.lcd2.i2c_address == 0x27
+    assert cfg.lcd2.i2c_bus == 3
     assert cfg.lcd2.layout == "instructions"
     assert cfg.lcd2.pages == ()
     assert cfg.lcd2.page_seconds == 6.0
@@ -228,7 +228,7 @@ def test_two_panels_on_one_address_are_called_out(tmp_path: Path) -> None:
         enabled = true
         [lcd2]
         enabled = true
-        i2c_address = 0x27
+        i2c_bus = 1
         """,
     )
     cfg = config.load(path)
