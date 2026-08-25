@@ -9,7 +9,7 @@ echo "Bootstrapping memory-machine in $REPO_DIR"
 
 if [ ! -d "$REPO_DIR/.git" ]; then
     echo "Cloning repository..."
-    git clone git@github.com:binaryLady/memory-machine.git "$REPO_DIR"
+    git clone "${MOTION_PLAYER_GIT_URL:-https://github.com/binaryLady/memory-machine.git}" "$REPO_DIR"
 fi
 
 cd "$REPO_DIR"

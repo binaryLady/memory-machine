@@ -1,12 +1,49 @@
-# memory-machine
+# Memory<>Machine
 
-A Raspberry Pi gallery installation: the audio plays continuously, and touching
-a pad plays the video in reverse for as long as contact is held. Let go and the
-piece returns to its idle state; stay in contact all the way to the beginning
-and it turns and plays forward.
+*A self-portrait that unmakes itself when observed.*
 
-This repository builds the `motion-player` Debian package. The package name is
-`motion-player`; the repo is `memory-machine`.
+**[the-tech-margin.com/memory-machine](https://the-tech-margin.com/memory-machine)**
+
+Memory<>Machine is an interactive installation by [Sonia Cook-Broen
+(TheTechMargin)](https://the-tech-margin.com), shown at SynthTember 2026. The
+portrait comes from a GAN trained exclusively on the artist's hand-painted
+works — no external datasets, a machine whose only memory is her painting.
+Snapshots saved during training capture its progression from noise to a
+recognizable face; played in reverse, they become a timeline of forgetting.
+
+At rest, the portrait plays forward. Observe it — lift the headphones, touch
+and hold — and it degrades backward through the machine's training history,
+un-learning itself toward noise. Let go and it recovers. Hold all the way to
+its beginning and it surrenders, re-forming from nothing. A measurement event,
+in the sense Jung and Pauli meant it: observation alters the observed, the way
+remembering rewrites a memory.
+
+This repository is the engine that runs the piece: a Raspberry Pi video/audio
+player driven by a physical sensor, shipped as the `motion-player` Debian
+package. The package name is `motion-player`; the repo is `memory-machine`.
+
+## The gallery build
+
+The installed piece, as it runs in the show:
+
+- The portrait floats in a layered acrylic light box, edge-lit neon pink,
+  mounted portrait with pre-rendered portrait cuts (no compositor rotation).
+- Below it a Raspberry Pi 5 runs exposed at the center of an LED-edged
+  dichroic diamond.
+- Two blue 20x4 character LCDs murmur the machine's inner monologue — one is
+  its heartbeat (60 bpm at rest, 100 bpm while a visitor holds on, still
+  overnight), the other a rotating instruction card for the visitor.
+- Two pairs of headphones hang on hooks either side — lifting one is the act
+  of observation that collapses the portrait — and a dichroic-wrapped USB
+  gamepad offers a second touch.
+- The soundscape, *explore*, is built on the Moog TheraMini, threaded with
+  loops of generative sitar prompted from free-verse writing.
+- The system runs autonomously: one power outlet, no network. It sleeps
+  overnight on a schedule and wakes itself for gallery hours.
+
+The engine is not tied to that build: any of a dozen sensor backends can be
+the "observation", any video/audio pair can be the piece, and everything is
+driven from one config file.
 
 ## Quick start (on your laptop)
 
@@ -27,50 +64,61 @@ libraries (`python3-opencv`, `python3-gpiozero`, `python3-lgpio`,
 src/                       Python engine
   motion_test.py           entry point
   config.py                config loading / validation
-  logging_setup.py         size-capped rotating log
   state.py                 state machine
   video.py                 OpenCV playback
   audio.py                 pygame.mixer playback/fade
+  lcd.py                   heartbeat + instruction-card LCD panels
+  schedule.py              overnight sleep window
+  telemetry.py             optional remote monitoring
+  setup_wizard.py          motion-player-setup
   status.py                runtime status file + CLI
   sensors/                 pluggable sensor backends
 config/
-  config.default.ini       shipped defaults
+  config.default.ini       shipped defaults (single source for the docs)
 packaging/
   build_deb.sh             Debian package builder
-  motion-player.desktop    menu / desktop entry
+  motion-player-*          installed command wrappers
   motion-player.service    systemd user unit
-  icons/                   16px … 256px PNGs
-  make_icon.py             regenerate icons
+  motion-player.desktop    menu / desktop entry
+  icons/                   16px … 1024px PNGs
 scripts/
   bootstrap_pi.sh          one-time Pi setup
   update.sh                source for /usr/bin/motion-player-update
   status.sh                source for /usr/bin/motion-player-status
-VERSION                    package version
-Makefile
-README.md                  this file
+  check_docs.py            audits COMMANDS.md against the code
+tests/                     377 tests; run anywhere, no Pi hardware needed
+COMMANDS.md                full operator reference
 GALLERY.md                 laminated card for gallery staff
+CONTROLLER.md              visitor-facing instruction card
+VERSION                    package version
 ```
 
-## Install on the Pi
-
-1. Generate a deploy key on the Pi and add it to this GitHub repo under
-   **Settings → Deploy keys** (write access only if you will push from the Pi).
-2. `ssh -T git@github.com` should succeed before continuing.
-3. Clone this repo and run the bootstrap:
+## Install on a Pi
 
 ```bash
-git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+git clone https://github.com/binaryLady/memory-machine.git ~/memory-machine
 cd ~/memory-machine
 ./scripts/bootstrap_pi.sh
 ```
 
-The bootstrap installs dependencies, builds the release `.deb`, installs it,
-enables linger for your user, and starts the systemd user service.
+The bootstrap installs apt dependencies, enables I2C, installs the MPR121
+touch-pad library system-wide (`pip --break-system-packages`, deliberately —
+the engine runs under the OS Python), builds the release `.deb`, installs it,
+enables linger for your user, and starts the systemd user service. Use
+`git@github.com:binaryLady/memory-machine.git` instead if the Pi has a deploy
+key and will push.
+
+Then run the guided setup — screen shape, sensor, sleep hours, test mode:
+
+```bash
+motion-player-setup
+```
 
 ## Media
 
-Place the real video and audio files in `~/memory-machine-media`, which the
-desktop shortcut **memory-machine-media** points to:
+The package ships no media: bring your own video and audio. Place the files in
+`~/memory-machine-media`, which the desktop shortcut **memory-machine-media**
+points to:
 
 ```
 ~/memory-machine-media/piece.mp4                    always
@@ -81,8 +129,8 @@ desktop shortcut **memory-machine-media** points to:
 ```
 
 Every video cut needs its own pre-rendered reverse, because the rewind plays
-that copy forward — a cut without one goes black the moment the pad is
-lifted. Build them once, whenever the footage changes, one call per cut:
+that copy forward — a cut without one goes black the moment the visitor lets
+go. Build them once, whenever the footage changes, one call per cut:
 
 ```bash
 motion-player-reverse
@@ -93,8 +141,8 @@ motion-player-reverse ~/memory-machine-media/piece_portrait.mp4
 ```
 
 For a show, render each cut at the resolution it will actually be displayed at
-instead, which builds the reverse at the same time and removes per-frame scaling
-entirely:
+instead, which builds the reverse at the same time and removes per-frame
+scaling entirely:
 
 ```bash
 motion-player-prepare
@@ -110,18 +158,18 @@ keyframe every time, which is what limited the old engine to small clips; with
 the pre-reversed file, 1080p runs comfortably on a Pi. Encoding is CPU-heavy —
 run it on a laptop and copy the result over if the Pi is slow.
 
-The installer creates that folder and a desktop shortcut, so you can drag and
-drop files without using a terminal. You can also right-click the
+The installer creates the media folder and a desktop shortcut, so you can drag
+and drop files without using a terminal. You can also right-click the
 **memory-machine** icon and choose **Open media folder**.
 
 Driving several screens from an HDMI splitter needs no configuration in the
-app — it mirrors one signal, so the resolutions may differ as long as the aspect
-ratios match. Pin the output mode so the splitter cannot renegotiate it
+app — it mirrors one signal, so the resolutions may differ as long as the
+aspect ratios match. Pin the output mode so the splitter cannot renegotiate it
 mid-show; see **Multiple screens** in [COMMANDS.md](COMMANDS.md).
 
 If you use different file names, edit `/etc/motion-player/config.ini` to point
-elsewhere. The package does not ship media; the app logs a clear "media missing"
-reason and shows a black screen if the files are absent.
+elsewhere. The app logs a clear "media missing" reason and shows a black
+screen if the files are absent.
 
 ## Commands
 
@@ -134,6 +182,7 @@ reason and shows a black screen if the files are absent.
 | `motion-player-prepare` | render the piece at the screen's resolution, plus its reverse |
 | `motion-player-reverse` | build the pre-rendered reverse clip |
 | `motion-player-display` | pin the HDMI output mode, stop screen blanking |
+| `motion-player-sensor` | probe and fit the sensor (`--probe`, `--fit`) |
 | `motion-player-media` | open the media folder |
 | `motion-player` | the engine itself (`--check-config`, `--verbose`, `--log`) |
 
@@ -141,7 +190,8 @@ reason and shows a black screen if the files are absent.
 is not run by hand.
 
 [COMMANDS.md](COMMANDS.md) is the full operator reference: getting started,
-media, multiple screens, testing without the sensor, and troubleshooting.
+media, multiple screens, testing without the sensor, every config key, and
+troubleshooting.
 
 ## Update from the Pi
 
@@ -160,128 +210,57 @@ update, the previous package is reinstalled and the piece keeps running. See
 ## Status over SSH
 
 ```bash
-/usr/bin/motion-player-status        # human-readable
-/usr/bin/motion-player-status --json # machine-readable
+motion-player-status        # human-readable
+motion-player-status --json # machine-readable
 ```
 
 This shows uptime, systemd restart count, current state, sensor reading, lift
 and accepted/rejected transition counts, resolved audio sink, and the last
 error.
 
-## Config reference
+## Configuration
 
 All configuration lives in `/etc/motion-player/config.ini`, root-owned `0644`.
-It is marked as a Debian `conffile`, so edits survive package upgrades. Unknown
-keys are warned and ignored; missing keys fall back to the default below.
+It is a Debian `conffile`, so edits survive package upgrades. Unknown keys are
+warned and ignored; missing keys fall back to the shipped defaults in
+[config/config.default.ini](config/config.default.ini).
 
-```ini
-[media]
-video_file          = piece.mp4        ; absolute or relative to ~/memory-machine-media/
-audio_file          = piece.wav
-reverse_file        = piece.reverse.mp4 ; built by motion-player-reverse
-cuts                  =                ; alternative cuts, comma separated;
-                                       ; the closest in shape to the screen wins
+The full key-by-key reference lives in
+[COMMANDS.md](COMMANDS.md) and is generated from `config.default.ini` by
+`make docs-sync`, so it cannot drift. The short version of what's in there:
 
-[playback]
-idle_mode           = hold_first_frame ; hold_first_frame | loop_forward | black
-reverse_rate        = native           ; native | fit_to_audio | <float>
-on_rewind_end       = resume_forward   ; resume_forward | hold | loop_reverse
-scaling             = fit              ; fit | fill | stretch
-fullscreen          = true
-display             = auto             ; auto | HDMI-A-1 | HDMI-A-2
-display_mode        = auto             ; auto | 1920x1080@60, re-pinned each start
+- `[media]` — the video/audio pair, alternative cuts per screen shape, and an
+  optional kaleidoscope twin the gamepad can switch to.
+- `[playback]` — idle behaviour, rewind rate (`fit_to_audio` slows the rewind
+  so frame 0 lands exactly when the sound ends), scaling, display pinning.
+- `[audio]` — sink selection by name, volume, fades, whether sound is tied to
+  the sensor at all.
+- `[lcd]` / `[lcd2]` — the heartbeat panel and the rotating instruction card.
+- `[sensor]` / `[gamepad]` — which observation hardware drives the piece, and
+  its debounce timing.
+- `[schedule]` — overnight sleep: black, silent, dark LCD.
+- `[telemetry]` — optional remote monitoring, off by default.
+- `[system]` — production/test mode, log level and size cap.
 
-[audio]
-audio_sink          = USB              ; ALSA/PipeWire device NAME, or a
-                                       ; substring of one; "auto" for the
-                                       ; first non-HDMI output
-volume              = 0.8              ; fixed 0.0–1.0
-fade_out_ms         = 400              ; unused when audio_mode = always
-on_audio_end        = silence          ; silence | loop
-audio_mode          = always           ; always | on_lift — whether the sound
-                                       ; is tied to the sensor at all
-
-[lcd]
-enabled             = false            ; 20x4 I2C character panel
-i2c_bus             = 1
-i2c_address         = 0x27
-idle_bpm            = 60               ; heart rate at rest
-engaged_bpm         = 100              ; heart rate while a visitor holds on
-sleep_bpm           = 0                ; overnight; 0 = still heart
-
-[lcd2]
-enabled             = false            ; second panel: the visitor's rotating
-                                       ; instruction card (see COMMANDS.md)
-i2c_bus             = 3                ; second hardware bus; needs the
-                                       ; i2c3-pi5 overlay (see COMMANDS.md)
-page_seconds        = 6                ; how long each page stays up
-
-[sensor]
-sensor_type         = capacitive       ; switch | reed | beam | reflective |
-                                       ; capacitive | distance | hall | pir |
-                                       ; mmwave | gpio_raw | keyboard | none
-                                       ; or fused: switch+beam
-sensor_combine      = any              ; any | all
-engaged_when        = closed           ; open | closed
-
-gpio_pin            = 4
-pull_up             = true
-
-; distance backends
-trigger_pin         = 23
-echo_pin            = 24
-threshold_cm        = 15
-i2c_address         = 0x29             ; set to use VL53L0X ToF instead of HC-SR04
-
-; capacitive
-touch_channel       = 0
-
-; timing
-bounce_time_ms      = 50
-min_lift_ms         = 250
-min_replace_ms      = 250
-max_engaged_minutes = 30
-
-[telemetry]
-enabled             = false            ; true | false
-endpoint_url        =                  ; http:// or https://
-interval_s          = 60               ; heartbeat interval
-batch_size          = 10               ; events per POST
-timeout_s           = 5                ; HTTP timeout
-
-[schedule]
-enabled             = false            ; sleep overnight: black, silent, dark LCD
-sleep_start         = 00:00            ; HH:MM local; may span midnight
-sleep_end           = 08:00
-
-[system]
-mode                = production       ; production | test (test = debug logs + log tails in telemetry)
-log_level           = info
-exit_after_s        = 0                ; stop cleanly after N seconds; soak tests only             ; debug | info | warning | error
-log_max_mb          = 20               ; cap across all rotated files
-restart_on_crash    = true
-```
-
-### Key config choices to make on site
+Key choices to make on site:
 
 - `engaged_when`: a touch pad is engaged when its contact **closes**, which is
   why `closed` is the default. A cradle microswitch is the other way round —
   the headphones' weight holds it closed and lifting them opens it, so that
   wants `open`. Change this whenever `sensor_type` changes;
   `motion-player-setup` does it for you.
-- `reverse_rate`: use `fit_to_audio` if the audio is longer than the footage;
-  it slows the rewind so frame 0 is reached exactly when the sound ends.
+- `reverse_rate`: use `fit_to_audio` if the audio is longer than the footage.
 
-## Sensor wiring
+## Sensors
 
-The shipped sensor is a USB game controller. Hold **Start or Select** and the
-piece rewinds; **A or B** switches the picture to its kaleidoscope twin; the
-**arrows** turn through every sound in the media folder, right/down forward
-and left/up back. `motion-player-sensor --fit` finds the pad and writes `gamepad` / `closed`
-together, and `--probe` prints the name and number of whatever you press, which
-is how a pad that numbers its buttons differently gets corrected. See
-COMMANDS.md for the whole control map and the touch pad's header pins,
-and CONTROLLER.md for the visitor-facing instruction card.
+The shipped default sensor is a USB game controller. Hold **Start or Select**
+and the piece rewinds; **A or B** switches the picture to its kaleidoscope
+twin; the **arrows** turn through every sound in the media folder.
+`motion-player-sensor --fit` finds the pad and writes the config for it, and
+`--probe` prints the name and number of whatever you press, which is how a pad
+that numbers its buttons differently gets corrected. See COMMANDS.md for the
+whole control map and the touch pad's header pins, and CONTROLLER.md for the
+visitor-facing instruction card.
 
 | sensor_type  | Hardware                       | Notes                                                |
 | ------------ | ------------------------------ | ---------------------------------------------------- |
@@ -307,8 +286,8 @@ falls back to `keyboard` so the piece keeps running.
 
 ## Tuning debounce from the logs
 
-Every raw edge and accepted transition is logged to the `motion-player.transitions`
-logger. Greppable lines look like:
+Every raw edge and accepted transition is logged to the
+`motion-player.transitions` logger. Greppable lines look like:
 
 ```
 transition sensor=switch event=lift raw=engaged engaged_when=open accepted=true ts=12345.678
@@ -329,29 +308,31 @@ Runtime logs go to:
 ~/.local/state/motion-player/motion-player.log
 ```
 
-and are rotated so the total size stays near `log_max_mb`. The package never
+and are rotated so the total size stays near `log_max_mb`. The piece never
 shows a traceback or dialog on screen.
 
 ## Remote telemetry
 
-Set `enabled = true` in the `[telemetry]` section. The default endpoint is:
+Off by default, and the endpoint ships empty — nothing is sent anywhere unless
+you set `endpoint_url` to your own server and flip `enabled = true` in the
+`[telemetry]` section.
 
-```
-https://lab.thetechmargin.com/memorymachine/api/telemetry
-```
+The engine then POSTs JSON batches containing:
 
-The engine POSTs JSON batches containing:
-
-- **Events:** every accepted `lift` and `replace`, with timestamp, source sensor,
-  and current state.
+- **Events:** every accepted `lift` and `replace`, with timestamp, source
+  sensor, and current state.
 - **Heartbeats:** every `interval_s` with uptime, current state, raw sensor
-  reading, lift/accepted/rejected counts, resolved audio sink,
-  last error, and a tail of the local log (`log_tail_lines`).
+  reading, lift/accepted/rejected counts, CPU temperature and throttle flags,
+  playback fps, resolved audio sink, and the last error. A tail of the local
+  log is attached only when `mode = test`; production runs keep their logs
+  local.
 
-Telemetry runs on a background thread and never blocks the main loop. Invalid
-or unreachable endpoints are logged but do not stop the piece.
+No file paths or identifiers beyond the above are sent. Telemetry runs on a
+background thread and never blocks the main loop. Invalid or unreachable
+endpoints are logged but do not stop the piece.
 
-A prompt for building the receiving UI route is in `docs/ui-prompt.md`.
+A wire-format spec for building a receiving dashboard is in
+[docs/ui-prompt.md](docs/ui-prompt.md).
 
 ## Development on a laptop
 
@@ -367,6 +348,30 @@ Keys in the OpenCV window:
 - `d`: dump current status to log
 - `q`: quit
 
+The whole suite runs without Pi hardware — every native library is imported
+lazily and mocked in tests:
+
+```bash
+make lint && make check
+```
+
+## The artist
+
+**Sonia Cook-Broen** — [@thetechmargin](https://github.com/binaryLady) — is an artist-technologist working at
+the intersection of painting, generative systems, and interactive
+installation. Memory<>Machine belongs to a larger body of work of paintings,
+generative pieces, and installations; she is currently accepting commissions.
+
+- Piece: [the-tech-margin.com/memory-machine](https://the-tech-margin.com/memory-machine)
+- Studio: [the-tech-margin.com](https://the-tech-margin.com)
+- Contact: [sonia@thetechmargin.com](mailto:sonia@thetechmargin.com)
+
 ## License
 
-MIT License — Copyright 2026 TheTechMargin
+[MIT](LICENSE) — Copyright 2026 TheTechMargin
+
+Author: [@thetechmargin](https://the-tech-margin.com) — sonia@thetechmargin.com
+
+The engine is open source; the piece's media — the GAN portrait, the training
+snapshots, the soundscape — is the artist's own work and is not part of this
+repository.

@@ -1,24 +1,19 @@
-# Prompt: add `/memorymachine` telemetry + logging UI
+# Telemetry wire format
 
-Add a new route to the existing TheTechMargin app at:
+The engine's optional telemetry (see `[telemetry]` in
+`config/config.default.ini`, off by default) POSTs to whatever endpoint you
+configure. This is the format a receiving dashboard should expect.
 
-```
-https://lab.thetechmargin.com/memorymachine
-```
-
-The page receives telemetry from the `memory-machine` Raspberry Pi installation
-and lets us monitor it remotely.
-
-## Backend endpoint
-
-Expose a single POST endpoint at:
+## Endpoint
 
 ```
-POST https://lab.thetechmargin.com/memorymachine/api/telemetry
+POST <endpoint_url>
 Content-Type: application/json
 ```
 
-The body is a JSON array of telemetry records. Each record has:
+The body is a JSON array of telemetry records, batched up to `batch_size`.
+
+## Records
 
 ```ts
 interface TelemetryRecord {
@@ -40,47 +35,41 @@ interface TelemetryRecord {
   rejected_count?: number;
   audio_sink?: string;
   last_error?: string;
-  log_tail?: string[]; // last N lines of the local log file
+  // compact health subset (present when available)
+  cpu_percent?: number;
+  temperature_c?: number;
+  throttled?: string;
+  fan_level?: number;
+  asleep?: boolean;
+  version?: string;
+  fps?: number;
+  target_fps?: number;
+  frame_worst_ms?: number;
+  // only when [system] mode = test; production keeps logs local
+  log_tail?: string[];
 }
 ```
 
-Store the latest record (or the latest per-installation if you later add an
-installation ID) in memory or a small persistent store. The Pi currently sends
-telemetry from a single device, so a single global latest-state bucket is fine.
+An **event** record is sent for every accepted `lift` and `replace`. A
+**heartbeat** is sent every `interval_s` seconds. Nothing else is transmitted:
+no file paths, no user identifiers.
 
-## Frontend page
-
-At `lab.thetechmargin.com/memorymachine` render:
+## Suggested dashboard
 
 1. **Live status card** — online/offline (heartbeat within last 2× interval),
    current state (`IDLE` / `ENGAGED`), sensor name, raw sensor reading.
 2. **Counts** — lift, accepted transitions, rejected transitions, uptime.
-3. **Audio/video health** — resolved audio sink, last error.
-4. **Event feed** — most recent lift/replace events with timestamps; show in
-   chronological order newest-first.
-5. **Log tail viewer** — render the `log_tail` array as a monospace, read-only
-   log window. Auto-scroll to the bottom on new heartbeats.
+3. **Health** — CPU, temperature, throttle flags, playback fps, resolved audio
+   sink, last error.
+4. **Event feed** — most recent lift/replace events, newest first.
+5. **Log tail viewer** — monospace read-only window for `log_tail`, when the
+   piece runs in test mode.
 
-## Design requirements
-
-- Use the existing TTM stack (TypeScript, React).
-- No default exports from components; use `export function ComponentName`.
-- No `any` without an explicit disable comment and reason.
-- Pull all colors from the project’s CSS variables / design tokens; no hardcoded
-  hex values.
-- Keep the page responsive down to mobile widths.
-- Add a short label and accessible controls (tooltips as verb phrases, no
-  icon-only buttons without labels).
-- Page title: “memory-machine monitor — The Tech Margin”.
-
-## Optional / future
-
-- Accept an installation ID from the Pi later so multiple gallery pieces can be
-  monitored on one page.
-- Add a simple Bearer-token gate if the route needs protection.
+The Pi sends telemetry from a single device, so a single latest-state bucket
+is fine; accept an installation ID later if multiple pieces share one
+dashboard. Protect the route (e.g. a Bearer token) if it is public.
 
 ## References
 
-- Engine repo: https://github.com/binaryLady/memory-machine
 - Telemetry sender: `src/telemetry.py`
 - Config section: `[telemetry]` in `config/config.default.ini`

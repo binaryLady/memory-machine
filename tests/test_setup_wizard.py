@@ -436,7 +436,7 @@ def test_every_offered_sensor_is_a_backend_the_config_accepts() -> None:
 
 
 def test_pressing_enter_through_every_question_returns_the_config_untouched(monkeypatch) -> None:
-    """HANDOFF's wizard smoke test, as a test rather than an instruction."""
+    """The wizard smoke test, as a test rather than an instruction."""
     monkeypatch.setattr("builtins.input", lambda *_args: "")
     monkeypatch.setattr(setup_wizard, "detected_screens", lambda: [])
     monkeypatch.setattr(setup_wizard, "audio_device_names", lambda: [])

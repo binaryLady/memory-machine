@@ -58,15 +58,15 @@ First install on a fresh Pi. The bootstrap installs dependencies, builds and
 installs the `.deb`, enables linger, and starts the service:
 
 ```bash
-git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+git clone https://github.com/binaryLady/memory-machine.git ~/memory-machine
 ```
 
 ```bash
 cd ~/memory-machine && ./scripts/bootstrap_pi.sh
 ```
 
-Use `https://github.com/binaryLady/memory-machine.git` if this Pi has no deploy
-key set up.
+Use `git@github.com:binaryLady/memory-machine.git` instead if this Pi has a
+deploy key and will push.
 
 If the app was installed straight from a `.deb` there is no checkout, which is
 what makes `motion-player-update` refuse to run. Clone it, then build and
@@ -74,7 +74,7 @@ install over the top — your `/etc/motion-player/config.ini` is a Debian
 conffile and survives:
 
 ```bash
-git clone git@github.com:binaryLady/memory-machine.git ~/memory-machine
+git clone https://github.com/binaryLady/memory-machine.git ~/memory-machine
 ```
 
 ```bash
@@ -1195,7 +1195,7 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `mode` | `production` | mode: production \| test. Test runs keep their logs to themselves; only production heartbeats carry log tails to the telemetry endpoint, and only while the piece is awake. |
+| `mode` | `production` | mode: production \| test. Only test-mode heartbeats carry log tails to the telemetry endpoint, and only while the piece is awake; production runs keep their logs local. |
 | `log_level` | `info` | — |
 | `exit_after_s` | `0` | Stop cleanly after this many seconds; 0 = run forever. Soak tests only — leave at 0 for a show. |
 | `log_max_mb` | `20` | — |
@@ -1205,8 +1205,8 @@ description, edit the comments in `config/config.default.ini` and run
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `enabled` | `false` | Send HTTP POSTs to a remote endpoint for monitoring. Only http:// and https:// URLs are accepted. |
-| `endpoint_url` | `https://lab.thetechmargin.com/memorymachine/api/telemetry` | — |
+| `enabled` | `false` | Send HTTP POSTs to a remote endpoint for monitoring. Only http:// and https:// URLs are accepted. Ships empty: set your own endpoint before enabling — nothing is sent anywhere by default. |
+| `endpoint_url` | `*(empty)*` | — |
 | `interval_s` | `60` | — |
 | `batch_size` | `10` | — |
 | `timeout_s` | `5` | — |

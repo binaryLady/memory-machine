@@ -285,7 +285,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     "telemetry": {
         "enabled": False,
-        "endpoint_url": "https://lab.thetechmargin.com/memorymachine/api/telemetry",
+        "endpoint_url": "",
         "interval_s": 60,
         "batch_size": 10,
         "timeout_s": 5,

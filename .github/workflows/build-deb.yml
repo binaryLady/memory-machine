@@ -43,8 +43,8 @@ jobs:
 
       - name: Test install in Debian container
         run: |
-          docker run --rm -v "$PWD:/workspace" debian:bookworm-slim \
-            bash -c "dpkg -i /workspace/motion-player_*.deb || apt-get update && apt-get install -fy"
+          docker run --rm -v "$PWD:/workspace" debian:trixie-slim \
+            bash -c "apt-get update && { dpkg -i /workspace/motion-player_*.deb || apt-get install -fy; } && dpkg -s motion-player"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -56,6 +56,8 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4

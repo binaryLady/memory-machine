@@ -10,6 +10,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 
 # Build artifacts
 *.deb
@@ -37,6 +38,9 @@ wpa_supplicant.conf
 # Agent / editor local state (may hold permission allowlists and machine paths)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Internal session-handoff notes — working state, not project documentation
+HANDOFF.md
 
 # Python virtualenvs
 venv/
