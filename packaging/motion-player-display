@@ -78,6 +78,10 @@ case "${1:---show}" in
             echo "Mode must look like 1920x1080 or 1920x1080@60; got '$MODE'" >&2
             exit 2
         fi
+        if ! printf '%s' "$CONN" | grep -qE '^[A-Za-z0-9-]+$'; then
+            echo "Connector must look like HDMI-A-1; got '$CONN'" >&2
+            exit 2
+        fi
         require_root
         LINE="$(tr -d '\n' < "$CMDLINE")"
         # Drop any existing setting for this connector so repeat runs are safe.

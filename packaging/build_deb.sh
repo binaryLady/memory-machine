@@ -8,7 +8,7 @@ set -euo pipefail
 
 PKG="motion-player"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${VERSION:-$(cat "$REPO_ROOT/VERSION" | tr -d '[:space:]')}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")}"
 MAINTAINER="${MAINTAINER:-TheTechMargin <sonia@thetechmargin.com>}"
 BUILD_ROOT="$(mktemp -d)"
 STAGE="$BUILD_ROOT/$PKG"
@@ -82,10 +82,7 @@ chmod 0755 "$STAGE/usr/bin/motion-player"
 # ---------------------------------------------------------------------------
 # 5. Status / update helpers
 # ---------------------------------------------------------------------------
-cat > "$STAGE/usr/bin/motion-player-status" <<'STATUS'
-#!/usr/bin/env bash
-exec python3 /opt/motion-player/status.py "$@"
-STATUS
+cp "$REPO_ROOT/scripts/status.sh" "$STAGE/usr/bin/motion-player-status"
 chmod 0755 "$STAGE/usr/bin/motion-player-status"
 
 cp "$REPO_ROOT/scripts/update.sh" "$STAGE/usr/bin/motion-player-update"
@@ -152,11 +149,11 @@ chmod 0644 "$STAGE/DEBIAN/conffiles"
 # 9. Package metadata
 # ---------------------------------------------------------------------------
 if [[ "${STRICT_DEPS:-0}" == "1" ]]; then
-    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
-    RECOMMENDS=""
+    DEPENDS="python3, python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin, git, make, dpkg-dev"
+    RECOMMENDS="lxterminal"
 else
-    DEPENDS="python3, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin"
-    RECOMMENDS="python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame"
+    DEPENDS="python3, python3-smbus, ffmpeg, zenity, xdg-utils, unclutter, libnotify-bin, git, make, dpkg-dev"
+    RECOMMENDS="python3-opencv, python3-gpiozero, python3-lgpio, python3-pygame, lxterminal"
 fi
 
 INSTALLED_SIZE=$(du -sk "$STAGE" | cut -f1)
@@ -183,9 +180,11 @@ Upstream-Name: motion-player
 Files: *
 Copyright: 2026 TheTechMargin
 License: MIT
- See /usr/share/doc/motion-player/LICENSE on systems where it is installed.
+ See /usr/share/doc/motion-player/LICENSE for the full license text.
 EOF
 chmod 0644 "$STAGE/usr/share/doc/$PKG/copyright"
+cp "$REPO_ROOT/LICENSE" "$STAGE/usr/share/doc/$PKG/LICENSE"
+chmod 0644 "$STAGE/usr/share/doc/$PKG/LICENSE"
 
 printf '%s (%s) unstable; urgency=low\n\n  * Packaged build of memory-machine.\n\n -- %s  %s\n' \
     "$PKG" "$VERSION" "$MAINTAINER" "$(date -R)" \
