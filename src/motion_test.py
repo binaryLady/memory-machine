@@ -109,15 +109,24 @@ def _handle_control(event: str, video: VideoEngine, audio: AudioEngine,
     leave the rewind exactly where the visitor had it. An action that actually
     changed something also answers on the panel, in the piece's voice.
     """
-    if event == "kaleidoscope":
+    if event in ("kaleidoscope", "kaleidoscope_on", "kaleidoscope_off"):
         before = video.showing_kaleidoscope
-        showing = video.toggle_kaleidoscope()
+        if event == "kaleidoscope":
+            showing = video.toggle_kaleidoscope()
+        else:
+            showing = video.set_kaleidoscope(event == "kaleidoscope_on")
         if showing != before:
             status.set_extra("kaleidoscope", showing)
             journal.record("kaleidoscope", showing=showing)
             heartbeat.set_notice(
                 NOTICE_LABELS["kaleidoscope_on" if showing else "kaleidoscope_off"]
             )
+        return True
+    if event in ("forward", "reverse"):
+        video.set_direction(event == "forward")
+        status.set_extra("direction", event)
+        journal.record(event)
+        heartbeat.set_notice(NOTICE_LABELS[event])
         return True
     if event in ("audio_next", "audio_prev"):
         if audio.cycle(1 if event == "audio_next" else -1):

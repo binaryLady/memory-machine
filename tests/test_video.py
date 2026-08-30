@@ -575,6 +575,34 @@ def test_switching_mid_rewind_seeks_rather_than_decodes(
     assert engine._stream_pos == 60  # (100 - 1) - 40, plus the frame just read
 
 
+def test_the_transport_arrows_steer_from_the_moment_on_screen(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = kaleidoscope_engine(monkeypatch, tmp_path)
+    engine.set_mode("REVERSE")
+    engine._current_index = 40.0
+
+    engine.set_direction(True)
+    assert engine.mode == "FORWARD"
+    assert engine._current_index == 40.0
+
+    engine.set_direction(False)
+    assert engine.mode == "REVERSE"
+    assert engine._current_index == 40.0
+
+
+def test_the_one_way_switch_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    engine = kaleidoscope_engine(monkeypatch, tmp_path)
+
+    assert engine.set_kaleidoscope(True) is True
+    assert engine.set_kaleidoscope(True) is True
+    assert engine._video_path.name == "piece.kaleidoscope.mp4"
+    assert engine.set_kaleidoscope(False) is False
+    assert engine._video_path.name == "piece.mp4"
+
+
 def test_without_a_twin_the_button_does_nothing(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

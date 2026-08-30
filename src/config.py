@@ -268,7 +268,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "left": "",
         "right": "",
         "hold": "",
-        "kaleidoscope": "left+right+up+down",
+        "kaleidoscope": "",
+        "kaleidoscope_on": "up",
+        "kaleidoscope_off": "down",
+        "forward": "right",
+        "reverse": "left",
         "audio_next": "start",
         "audio_prev": "select",
         "presence_s": 30,
@@ -330,7 +334,8 @@ _VALID_GAMEPAD_DIRECTIONS = {"left", "right", "up", "down"}
 # The face buttons by name, plus "any" for a pad that only ever holds.
 _GAMEPAD_BUTTONS = ("a", "b", "select", "start")
 _GAMEPAD_CONTROLS = {*_GAMEPAD_BUTTONS, "any"}
-_GAMEPAD_JOBS = ("hold", "kaleidoscope", "audio_next", "audio_prev")
+_GAMEPAD_JOBS = ("hold", "kaleidoscope", "kaleidoscope_on", "kaleidoscope_off",
+                 "forward", "reverse", "audio_next", "audio_prev")
 _VALID_SENSOR_COMBINE = {"any", "all"}
 
 

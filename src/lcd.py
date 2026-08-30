@@ -75,7 +75,7 @@ DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
     ("Memory<>Machine", "TOUCH THE CONTROLS", "looking is measuring", "I begin to forget"),
     ("Memory<>Machine", "let go: I recover", "re-learning my face", "from what I painted"),
     ("Memory<>Machine", "stay to my beginning", "I am noise, then", "I turn to face you"),
-    ("Memory<>Machine", "ARROWS: I refract", "START/SELECT: voices", "analog, unresolved"),
+    ("Memory<>Machine", "UP refract DN cohere", "L/R: my voices", "analog, unresolved"),
     ("Memory<>Machine", "you can only see me", "by unmaking me", "observed: altered"),
 )
 
@@ -90,6 +90,8 @@ NOTICE_SECONDS = 3.0
 NOTICE_LABELS = {
     "kaleidoscope_on": "I refract",
     "kaleidoscope_off": "I cohere",
+    "forward": "I recover",
+    "reverse": "I forget",
     "audio": "another voice",
 }
 
