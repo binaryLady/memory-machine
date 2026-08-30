@@ -206,6 +206,32 @@ def test_switching_sound_loops_the_new_one_when_the_old_one_was_looping(
     assert engine._looping is True, "audio_mode=always keeps looping across a switch"
 
 
+def test_the_old_sound_plays_on_while_the_new_one_loads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # Loading a minute of audio off the SD card takes real time; stopping the
+    # old sound first is a silence the room hears on every song change.
+    engine = make_engine(monkeypatch, tmp_path)
+    other = tmp_path / "second.wav"
+    other.touch()
+    engine.play_looping()
+    old_sound = engine._sound
+
+    stops_when_new_loaded = []
+    import audio as audio_module
+    original_load = type(engine)._load
+
+    def load_spy(self) -> None:
+        stops_when_new_loaded.append(old_sound.stops)
+        original_load(self)
+
+    monkeypatch.setattr(type(engine), "_load", load_spy)
+    engine.switch_to(other)
+
+    assert stops_when_new_loaded == [1], "the old sound must still be playing during the load"
+    assert old_sound.stops >= 2, "and stopped only once the new one is ready"
+
+
 def test_switching_to_the_sound_already_playing_changes_nothing(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
