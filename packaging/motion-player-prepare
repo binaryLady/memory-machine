@@ -56,7 +56,8 @@ motion-player-prepare — render the piece at the screen's resolution.
              --mode tile.
 
 Writes SRC.<WxH>.mp4 and its reversed copy, then offers to update the config.
-A non-default --mode joins the name too: SRC.<WxH>.fill.mp4.
+A non-default --mode joins the name too, and so does --rotate:
+SRC.<WxH>.fill.cw.mp4.
 USAGE
 }
 
@@ -273,9 +274,13 @@ STEM="${SRC%.*}"
 # The mode decides the framing, so it belongs in the name the way --fx already
 # is. Without it a render called 1280x800 is ambiguous between a padded one and
 # a cropped one, and re-running with a different --mode finds the old file
-# already newer than the master and silently keeps it.
+# already newer than the master and silently keeps it. --rotate decides the
+# picture just as much, so it joins for exactly the same reason: without it a
+# turned and an unturned render share a name, and the skip check hands back
+# whichever was built first.
 NAME="$SIZE"
 [ "$MODE" != "fit" ] && NAME="${SIZE}.${MODE}"
+[ -n "$ROTATE" ] && NAME="${NAME}.${ROTATE}"
 OUT="${STEM}.${NAME}.mp4"
 REVERSE="${STEM}.${NAME}.reverse.mp4"
 
@@ -302,7 +307,8 @@ if needs_render; then
             -c:v libx264 -preset "$PRESET" -crf "$CRF" -pix_fmt yuv420p "$OUT"
     fi
 else
-    echo "$(basename "$OUT") is newer than $(basename "$SRC"); skipping the render."
+    echo "$(basename "$OUT") is newer than $(basename "$SRC"); keeping it."
+    echo "(Different --crop or --trim values do not rebuild an existing render — use --force.)"
 fi
 
 echo "Building the reversed copy..."
