@@ -184,6 +184,39 @@ class VideoEngine:
     def showing_kaleidoscope(self) -> bool:
         return self._showing_kaleidoscope
 
+    def set_direction(self, forward: bool) -> None:
+        """Turn the piece onward or wind it back, from where it is.
+
+        Unlike set_mode, which starts a mode from its own end, the transport
+        arrows steer the moment the visitor is already looking at.
+        """
+        wanted = "FORWARD" if forward else "REVERSE"
+        if self._mode == wanted:
+            return
+        index = self._current_index
+        self.set_mode(wanted)
+        if not self._frame_count:
+            return
+        self._current_index = min(index, float(max(self._frame_count - 1, 0)))
+        if wanted == "REVERSE":
+            cap = self._reverse_cap
+            target = int((self._frame_count - 1) - self._current_index)
+        else:
+            cap = self._cap
+            target = int(self._current_index)
+        self._seek_to(cap, target)
+        self._show(self._last_frame)
+
+    def set_kaleidoscope(self, wanted: bool) -> bool:
+        """One-way switch: refract or cohere, idempotent on repeats.
+
+        The directional pair (up refracts, down coheres) needs an absolute
+        target — a toggle under an excited thumb ends wherever it lands.
+        """
+        if wanted == self._showing_kaleidoscope:
+            return self._showing_kaleidoscope
+        return self.toggle_kaleidoscope()
+
     def toggle_kaleidoscope(self) -> bool:
         """Switch the picture between the plain render and its kaleidoscope twin.
 

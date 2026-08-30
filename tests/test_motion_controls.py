@@ -14,9 +14,19 @@ class FakeVideo:
         self.audio_duration: float | None = None
         self._has_twin = has_twin
 
+    directions: list[bool] = []
+
     @property
     def showing_kaleidoscope(self) -> bool:
         return self.showing
+
+    def set_kaleidoscope(self, wanted: bool) -> bool:
+        if self._has_twin:
+            self.showing = wanted
+        return self.showing
+
+    def set_direction(self, forward: bool) -> None:
+        self.directions.append(forward)
 
     def toggle_kaleidoscope(self) -> bool:
         if self._has_twin:
@@ -95,6 +105,36 @@ def test_a_missing_twin_leaves_the_panel_and_journal_alone() -> None:
     assert handled is True
     assert recorder.calls == []
     assert panel.notices == []
+
+
+def test_the_directional_pair_is_idempotent_on_the_panel_too() -> None:
+    video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
+    panel = FakePanel()
+
+    motion_test._handle_control("kaleidoscope_on", video, audio, config_with(),
+                                recorder, recorder, panel)
+    motion_test._handle_control("kaleidoscope_on", video, audio, config_with(),
+                                recorder, recorder, panel)
+
+    assert video.showing is True
+    assert panel.notices == [motion_test.NOTICE_LABELS["kaleidoscope_on"]], \
+        "a repeat that changed nothing says nothing"
+
+
+def test_the_transport_arrows_answer_in_the_premise() -> None:
+    video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
+    video.directions = []
+    panel = FakePanel()
+
+    handled = motion_test._handle_control("forward", video, audio, config_with(),
+                                          recorder, recorder, panel)
+    motion_test._handle_control("reverse", video, audio, config_with(),
+                                recorder, recorder, panel)
+
+    assert handled is True
+    assert video.directions == [True, False]
+    assert panel.notices == [motion_test.NOTICE_LABELS["forward"],
+                             motion_test.NOTICE_LABELS["reverse"]]
 
 
 def test_an_arrow_turns_to_the_next_sound_and_retimes_the_rewind() -> None:
