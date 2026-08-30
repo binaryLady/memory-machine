@@ -558,6 +558,23 @@ def test_switching_render_keeps_the_visitor_where_they_were(
     assert engine._current_index == 40.0
 
 
+def test_switching_mid_rewind_seeks_rather_than_decodes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # A swap must jump to the visitor's place, not decode its way there —
+    # decoding hundreds of frames is seconds of frozen picture on the Pi.
+    engine = kaleidoscope_engine(monkeypatch, tmp_path)
+    engine.set_mode("REVERSE")
+    engine._current_index = 40.0
+
+    engine.toggle_kaleidoscope()
+
+    reverse_cap = engine._reverse_cap
+    assert reverse_cap.set_calls >= 1
+    assert reverse_cap.read_calls <= 2
+    assert engine._stream_pos == 60  # (100 - 1) - 40, plus the frame just read
+
+
 def test_without_a_twin_the_button_does_nothing(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
