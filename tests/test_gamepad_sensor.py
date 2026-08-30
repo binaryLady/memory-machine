@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import queue
 import struct
+import time
 from types import SimpleNamespace
 
 from sensors.gamepad import (
@@ -189,3 +190,34 @@ def test_an_unplugged_pad_lets_go() -> None:
     sensor._release_all()
 
     assert not sensor.is_engaged()
+
+
+def test_any_press_marks_presence_when_the_linger_is_set() -> None:
+    # Switching the picture is standing at the piece: the tap engages even
+    # though the control's job is not "hold".
+    sensor = GamepadSensor(sensor_config(), gamepad_config(presence_s=30))
+
+    sensor._handle(("button", 1, 1))
+    sensor._handle(("button", 1, 0))
+
+    assert sensor.is_engaged()
+
+
+def test_presence_fades_once_the_controls_sit_untouched() -> None:
+    sensor = GamepadSensor(sensor_config(), gamepad_config(presence_s=0.05))
+
+    sensor._handle(("button", 1, 1))
+    sensor._handle(("button", 1, 0))
+    assert sensor.is_engaged()
+    time.sleep(0.08)
+
+    assert not sensor.is_engaged()
+
+
+def test_letting_go_of_a_hold_is_not_leaving_while_presence_lingers() -> None:
+    sensor = GamepadSensor(sensor_config(), gamepad_config(presence_s=30))
+
+    sensor._handle(("button", 3, 1))   # start: a hold in this fixture
+    sensor._handle(("button", 3, 0))
+
+    assert sensor.is_engaged(), "the visitor is still standing at the piece"

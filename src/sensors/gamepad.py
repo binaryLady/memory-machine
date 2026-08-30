@@ -138,6 +138,11 @@ class GamepadSensor(Sensor):
         self._configured = config.gamepad_device
         self._numbers = dict(getattr(gamepad, "numbers", None) or _DEFAULT_NUMBERS)
         self._jobs = dict(getattr(gamepad, "jobs", None) or _DEFAULT_JOBS)
+        # Any interaction is a presence indicator: a press on anything marks a
+        # visitor present for this many seconds past their last touch. 0 keeps
+        # the classic contract, where only sustained contact engages.
+        self._presence_s = float(getattr(gamepad, "presence_s", 0) or 0)
+        self._presence_until = 0.0
         self._held: set[str] = set()
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -186,6 +191,7 @@ class GamepadSensor(Sensor):
             try:
                 ready, _, _ = select.select([descriptor], [], [], _SELECT_TIMEOUT_S)
                 if not ready:
+                    self._expire_presence()
                     continue
                 data = os.read(descriptor, _EVENT_SIZE)
             except (OSError, ValueError) as exc:
@@ -213,18 +219,44 @@ class GamepadSensor(Sensor):
                 # Every other job happens on the press. A release that also
                 # ended a hold has already been dealt with above.
                 continue
+            self._touch_presence()
             for job in jobs:
                 if job != "hold":
                     self._emit_action(job)
 
+    def _touch_presence(self) -> None:
+        """A press on anything is someone standing at the piece."""
+        if self._presence_s <= 0:
+            return
+        with self._lock:
+            engaged_before = bool(self._held) or time.monotonic() < self._presence_until
+            self._presence_until = time.monotonic() + self._presence_s
+        if not engaged_before:
+            self._on_raw_change(True)
+
+    def _expire_presence(self) -> None:
+        """Presence fades once the controls have sat untouched long enough."""
+        if self._presence_s <= 0:
+            return
+        with self._lock:
+            if self._presence_until == 0.0 or time.monotonic() < self._presence_until:
+                return
+            self._presence_until = 0.0
+            still_engaged = bool(self._held)
+        if not still_engaged:
+            self._on_raw_change(False)
+
     def _apply_hold(self, control: str, pressed: bool) -> None:
         with self._lock:
-            before = bool(self._held)
+            now = time.monotonic()
+            before = bool(self._held) or now < self._presence_until
             if pressed:
                 self._held.add(control)
             else:
                 self._held.discard(control)
-            after = bool(self._held)
+            # Lingering presence outlives the hold: letting go of the button
+            # while still standing at the piece is not leaving.
+            after = bool(self._held) or now < self._presence_until
         if after != before:
             self._on_raw_change(after)
 
@@ -241,11 +273,12 @@ class GamepadSensor(Sensor):
     def _release_all(self) -> None:
         """An unplugged pad lets go, rather than leaving the piece held open."""
         with self._lock:
-            was_held = bool(self._held)
+            was_engaged = bool(self._held) or time.monotonic() < self._presence_until
             self._held.clear()
-        if was_held:
+            self._presence_until = 0.0
+        if was_engaged:
             self._on_raw_change(False)
 
     def is_engaged(self) -> bool:
         with self._lock:
-            return bool(self._held)
+            return bool(self._held) or time.monotonic() < self._presence_until

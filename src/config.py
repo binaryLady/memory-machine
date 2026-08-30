@@ -106,6 +106,7 @@ class GamepadConfig:
 
     numbers: dict[str, int | None]
     jobs: dict[str, tuple[str, ...]]
+    presence_s: int
 
 
 @dataclass(frozen=True)
@@ -266,10 +267,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "down": "",
         "left": "",
         "right": "",
-        "hold": "start+select",
-        "kaleidoscope": "a+b",
-        "audio_next": "right+down",
-        "audio_prev": "left+up",
+        "hold": "",
+        "kaleidoscope": "left+right+up+down",
+        "audio_next": "start",
+        "audio_prev": "select",
+        "presence_s": 30,
     },
     "schedule": {
         "enabled": False,
@@ -617,6 +619,9 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
                 job: _control_list(gamepad_raw.get(job, DEFAULTS["gamepad"][job]))
                 for job in _GAMEPAD_JOBS
             },
+            presence_s=_parse_int(
+                gamepad_raw.get("presence_s"), DEFAULTS["gamepad"]["presence_s"], 0
+            ),
         ),
         system=SystemConfig(
             mode=str(system_raw.get("mode", DEFAULTS["system"]["mode"])),
