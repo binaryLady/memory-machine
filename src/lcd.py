@@ -418,7 +418,7 @@ def format_rows(
     state: str,
     cpu_percent: float,
     temperature_c: float,
-    lifts: int,
+    observers: tuple[int, int],
     uptime_s: float,
     label: str | None = None,
     title: str = DEFAULT_TITLE,
@@ -427,21 +427,18 @@ def format_rows(
 
     Column zero of the first row is left blank for the heart glyph, which is
     written separately so a beat does not rewrite the whole line.
-    """
-    hours, remainder = divmod(int(max(0.0, uptime_s)), 3600)
-    minutes = remainder // 60
-    if hours >= 24:
-        uptime = f"{hours // 24}d{hours % 24:02d}h"
-    else:
-        uptime = f"{hours}h{minutes:02d}m"
 
+    The last line is the piece's memory of being observed — today's count and
+    the whole show's, seeded from the journal so a restart forgets nothing.
+    """
     listening = label if label is not None else state_label(state)
+    today, total = observers
 
     rows = [
         center_line(title),
         center_line(listening),
         f"cpu {cpu_percent:3.0f}%   {temperature_c:4.1f}C",
-        f"holds {lifts:<5} up {uptime}",
+        f"today {today:<5}all {total}",
     ]
     return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
 
@@ -715,7 +712,8 @@ class Heartbeat:
                             self._state,
                             cpu,
                             read_temperature_c(),
-                            int(snapshot.get("lift_count", 0)),
+                            (int(snapshot.get("observers_today", 0)),
+                             int(snapshot.get("observers_total", 0))),
                             now - self._started_at,
                             label=word,
                             title=self._title,
@@ -788,7 +786,8 @@ class Heartbeat:
                         self._state,
                         cpu,
                         read_temperature_c(),
-                        int(snapshot.get("lift_count", 0)),
+                        (int(snapshot.get("observers_today", 0)),
+                         int(snapshot.get("observers_total", 0))),
                         now - self._started_at,
                         label=notice_label(self._notice, now)
                         or state_label(self._state, since_wake, self._labels),

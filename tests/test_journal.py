@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 
-from journal import Journal, day_name, journal_line
+from journal import Journal, count_lifts, day_name, journal_line
 
 
 def _clock_for(*, day: int, hour: int = 12):
@@ -54,3 +54,17 @@ def test_an_unwritable_journal_never_raises(tmp_path) -> None:
 
 def test_day_name_is_the_local_date() -> None:
     assert day_name(_clock_for(day=5)) == "2026-08-05"
+
+
+def test_count_lifts_aggregates_the_day_files(tmp_path) -> None:
+    (tmp_path / "2026-08-29.jsonl").write_text(
+        '{"t":"a","event":"lift"}\n{"t":"b","event":"replace"}\n{"t":"c","event":"lift"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "2026-08-30.jsonl").write_text('{"t":"d","event":"lift"}\n', encoding="utf-8")
+
+    assert count_lifts(tmp_path, "2026-08-30") == (1, 3)
+
+
+def test_count_lifts_survives_a_missing_directory(tmp_path) -> None:
+    assert count_lifts(tmp_path / "nowhere", "2026-08-30") == (0, 0)
