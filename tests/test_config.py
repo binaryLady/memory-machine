@@ -276,10 +276,14 @@ def test_the_shipped_defaults_are_the_gamepad_and_its_polarity(tmp_path: Path) -
     # is; the polarity must ship with the sensor.
     assert cfg.sensor.engaged_when == "closed"
     assert cfg.sensor.gamepad_device == "auto"
-    # Start and Select hold the piece; A and B are the kaleidoscope, and the
-    # arrows choose the sound, so neither can also be the rewind.
-    assert cfg.gamepad.jobs["hold"] == ("start", "select")
-    assert cfg.gamepad.jobs["kaleidoscope"] == ("a", "b")
+    # Nothing holds: any interaction is the presence indicator, lingering
+    # presence_s past the last touch. The arrows work the image; Start and
+    # Select turn through the sounds.
+    assert cfg.gamepad.jobs["hold"] == ()
+    assert cfg.gamepad.jobs["kaleidoscope"] == ("left", "right", "up", "down")
+    assert cfg.gamepad.jobs["audio_next"] == ("start",)
+    assert cfg.gamepad.jobs["audio_prev"] == ("select",)
+    assert cfg.gamepad.presence_s == 30
     assert cfg.audio.audio_sink == "USB"
 
 

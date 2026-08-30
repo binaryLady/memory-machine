@@ -905,10 +905,11 @@ section gives each a job:
 
 | Setting | Ships as | What it does |
 | --- | --- | --- |
-| `hold` | `start+select` | held to wind the piece back — the interaction itself. `any` means any button, which suits a pad that does nothing else. |
-| `kaleidoscope` | `a+b` | switches the picture between the plain render and its kaleidoscope twin |
-| `audio_next` | `right+down` | turns to the next sound in the media folder — every `.wav` and `.mp3` beside `media.audio_file`, in name order, wrapping at the end |
-| `audio_prev` | `left+up` | the same deck, turned the other way |
+| `hold` | *(empty)* | held to wind the piece back. Ships empty: presence comes from `presence_s` instead — any interaction is the visitor. Name controls here to bring the classic hold back; `any` means any button. |
+| `kaleidoscope` | `left+right+up+down` | switches the picture between the plain render and its kaleidoscope twin |
+| `audio_next` | `start` | turns to the next sound in the media folder — every `.wav` and `.mp3` beside `media.audio_file`, in name order, wrapping at the end |
+| `audio_prev` | `select` | the same deck, turned the other way |
+| `presence_s` | `30` | any press marks a visitor present for this many seconds past their last touch — the piece engages and rewinds while they play with the controls, and lets go once the pad sits untouched. `0` turns this off, leaving `hold` as the only presence. |
 
 A control can only hold **or** do something else — if A toggles the
 kaleidoscope, A cannot also be the rewind.

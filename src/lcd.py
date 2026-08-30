@@ -72,10 +72,10 @@ DEFAULT_LABELS = {
 # printable-ASCII columns; the first row leaves the icon's columns clear.
 DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
     ("Memory<>Machine", "OBSERVER DETECTED", "a face, remembered", "by a machine"),
-    ("Memory<>Machine", "HOLD START or SELECT", "looking is measuring", "I begin to forget"),
+    ("Memory<>Machine", "TOUCH THE CONTROLS", "looking is measuring", "I begin to forget"),
     ("Memory<>Machine", "let go: I recover", "re-learning my face", "from what I painted"),
     ("Memory<>Machine", "stay to my beginning", "I am noise, then", "I turn to face you"),
-    ("Memory<>Machine", "A or B: I refract", "ARROWS: my voices", "analog, unresolved"),
+    ("Memory<>Machine", "ARROWS: I refract", "START/SELECT: voices", "analog, unresolved"),
     ("Memory<>Machine", "you can only see me", "by unmaking me", "observed: altered"),
 )
 
