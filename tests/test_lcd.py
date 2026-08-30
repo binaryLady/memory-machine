@@ -528,3 +528,12 @@ def test_a_panel_opens_lit_by_default(monkeypatch) -> None:
     bus = _open_panel(monkeypatch, backlight=True)
 
     assert bus.writes[-1] & 0x08 == 0x08
+
+
+def test_a_fresh_notice_takes_the_label_line() -> None:
+    assert lcd.notice_label(("I refract", 10.0), now=9.9) == "I refract"
+
+
+def test_a_stale_notice_gives_the_line_back() -> None:
+    assert lcd.notice_label(("I refract", 10.0), now=10.0) is None
+    assert lcd.notice_label(None, now=0.0) is None

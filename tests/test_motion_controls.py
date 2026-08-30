@@ -9,12 +9,18 @@ import motion_test
 
 
 class FakeVideo:
-    def __init__(self) -> None:
+    def __init__(self, has_twin: bool = True) -> None:
         self.showing = False
         self.audio_duration: float | None = None
+        self._has_twin = has_twin
+
+    @property
+    def showing_kaleidoscope(self) -> bool:
+        return self.showing
 
     def toggle_kaleidoscope(self) -> bool:
-        self.showing = not self.showing
+        if self._has_twin:
+            self.showing = not self.showing
         return self.showing
 
     def set_audio_duration(self, seconds: float) -> None:
@@ -45,6 +51,14 @@ class FakeRecorder:
         self.calls.append((key, {"value": value}))
 
 
+class FakePanel:
+    def __init__(self) -> None:
+        self.notices: list[str] = []
+
+    def set_notice(self, text: str) -> None:
+        self.notices.append(text)
+
+
 def config_with() -> Any:
     return SimpleNamespace(gamepad=SimpleNamespace())
 
@@ -53,7 +67,7 @@ def test_a_lift_is_left_for_the_state_machine() -> None:
     video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
 
     handled = motion_test._handle_control("lift", video, audio, config_with(),
-                                          recorder, recorder)
+                                          recorder, recorder, FakePanel())
 
     assert handled is False
 
@@ -61,12 +75,26 @@ def test_a_lift_is_left_for_the_state_machine() -> None:
 def test_the_kaleidoscope_button_switches_the_picture() -> None:
     video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
 
+    panel = FakePanel()
     handled = motion_test._handle_control("kaleidoscope", video, audio, config_with(),
-                                          recorder, recorder)
+                                          recorder, recorder, panel)
 
     assert handled is True
     assert video.showing is True
     assert ("kaleidoscope", {"showing": True}) in recorder.calls
+    assert panel.notices == [motion_test.NOTICE_LABELS["kaleidoscope_on"]]
+
+
+def test_a_missing_twin_leaves_the_panel_and_journal_alone() -> None:
+    video, audio, recorder = FakeVideo(has_twin=False), FakeAudio(), FakeRecorder()
+    panel = FakePanel()
+
+    handled = motion_test._handle_control("kaleidoscope", video, audio, config_with(),
+                                          recorder, recorder, panel)
+
+    assert handled is True
+    assert recorder.calls == []
+    assert panel.notices == []
 
 
 def test_an_arrow_turns_to_the_next_sound_and_retimes_the_rewind() -> None:
@@ -74,19 +102,22 @@ def test_an_arrow_turns_to_the_next_sound_and_retimes_the_rewind() -> None:
     # different sound has to be measured again.
     video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
 
+    panel = FakePanel()
     handled = motion_test._handle_control("audio_next", video, audio, config_with(),
-                                          recorder, recorder)
+                                          recorder, recorder, panel)
 
     assert handled is True
     assert audio.steps == [1]
     assert video.audio_duration == 12.0
     assert ("audio_chosen", {"file": "second.wav"}) in recorder.calls
+    assert panel.notices == [motion_test.NOTICE_LABELS["audio"]]
 
 
 def test_the_other_arrow_turns_back() -> None:
     video, audio, recorder = FakeVideo(), FakeAudio(), FakeRecorder()
 
-    motion_test._handle_control("audio_prev", video, audio, config_with(), recorder, recorder)
+    motion_test._handle_control("audio_prev", video, audio, config_with(), recorder, recorder,
+                                FakePanel())
 
     assert audio.steps == [-1]
 
@@ -96,9 +127,11 @@ def test_an_arrow_with_nowhere_to_turn_is_still_swallowed() -> None:
     # anything — passing it on would only be logged as an unknown transition.
     video, audio, recorder = FakeVideo(), FakeAudio(switches=False), FakeRecorder()
 
+    panel = FakePanel()
     handled = motion_test._handle_control("audio_next", video, audio, config_with(),
-                                          recorder, recorder)
+                                          recorder, recorder, panel)
 
     assert handled is True
     assert video.audio_duration is None
     assert recorder.calls == []
+    assert panel.notices == []

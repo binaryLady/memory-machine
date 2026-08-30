@@ -910,6 +910,12 @@ section gives each a job:
 A control can only hold **or** do something else — if A toggles the
 kaleidoscope, A cannot also be the rewind.
 
+An action that actually changed something answers on the heartbeat panel, in
+the piece's own words — `I refract`, `I cohere`, `another voice` — holding the
+state line for a few seconds before the state word returns. No answer on the
+panel means the button had nothing to do: no kaleidoscope twin configured, or
+no second sound to turn to.
+
 The pad reports each button as a number, and pads disagree about which is
 which. The numbers ship as `a = 1`, `b = 0`, `select = 2`, `start = 3`; if this
 pad says otherwise, `--probe` prints the name and number of everything you

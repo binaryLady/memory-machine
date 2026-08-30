@@ -127,6 +127,21 @@ def test_combine_any_lifts_on_the_first_member() -> None:
     fused.stop()
 
 
+def test_fused_passes_one_shot_actions_through() -> None:
+    # The pad's kaleidoscope and audio buttons are not state changes; fused
+    # with another backend they must still reach the engine, untouched.
+    a, b = FakeMember("a"), FakeMember("b")
+    fused = FusedSensor([a, b], combine="any", engaged_when="closed")
+    events: queue.Queue = queue.Queue()
+    fused.start(events)
+
+    a._events.put(("kaleidoscope", time.monotonic(), "a"))
+
+    got = drain(events)
+    assert [(e[0], e[2]) for e in got] == [("kaleidoscope", "a")]
+    fused.stop()
+
+
 def test_keyboard_sensor_no_longer_owns_quitting() -> None:
     """The main loop quits for every backend, so the sensor must not claim it."""
     sensor = KeyboardSensor()

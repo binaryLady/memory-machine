@@ -19,7 +19,7 @@ import status as status_module
 from audio import AlwaysOnAudio, AudioEngine
 import sysinfo
 from journal import Journal
-from lcd import Panels
+from lcd import NOTICE_LABELS, Panels
 from schedule import SleepScheduler
 from sensors import NullSensor, make_sensor, start_sensor
 from state import StateMachine
@@ -100,23 +100,31 @@ def _apply_schedule_transition(transition: str | None, state: StateMachine, vide
 
 
 def _handle_control(event: str, video: VideoEngine, audio: AudioEngine,
-                    cfg: config.Config, journal: Any, status: Any) -> bool:
+                    cfg: config.Config, journal: Any, status: Any,
+                    heartbeat: Any) -> bool:
     """Act on the pad's one-shot controls, or say it was not one.
 
     Choosing a sound or switching the picture is not a state the piece is in,
     so these never reach the state machine — they change what is playing and
-    leave the rewind exactly where the visitor had it.
+    leave the rewind exactly where the visitor had it. An action that actually
+    changed something also answers on the panel, in the piece's voice.
     """
     if event == "kaleidoscope":
+        before = video.showing_kaleidoscope
         showing = video.toggle_kaleidoscope()
-        status.set_extra("kaleidoscope", showing)
-        journal.record("kaleidoscope", showing=showing)
+        if showing != before:
+            status.set_extra("kaleidoscope", showing)
+            journal.record("kaleidoscope", showing=showing)
+            heartbeat.set_notice(
+                NOTICE_LABELS["kaleidoscope_on" if showing else "kaleidoscope_off"]
+            )
         return True
     if event in ("audio_next", "audio_prev"):
         if audio.cycle(1 if event == "audio_next" else -1):
             video.set_audio_duration(audio.duration_s)
             status.set_extra("audio_file", audio.audio_path.name)
             journal.record("audio_chosen", file=audio.audio_path.name)
+            heartbeat.set_notice(NOTICE_LABELS["audio"])
         return True
     return False
 
@@ -178,7 +186,7 @@ def _main_loop(cfg: config.Config, sensor, video: VideoEngine, audio: AudioEngin
                     LOGGER.debug("Asleep; discarding sensor event %s", event)
                     continue
                 LOGGER.debug("Event from queue: %s %s %s", event, ts, source)
-                if _handle_control(event, video, audio, cfg, journal, status):
+                if _handle_control(event, video, audio, cfg, journal, status, heartbeat):
                     continue
                 state.handle(event)
                 status.set_state(state.state)

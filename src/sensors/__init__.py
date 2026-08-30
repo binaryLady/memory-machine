@@ -105,8 +105,16 @@ class FusedSensor(Sensor):
     def _pump_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
-                _event, timestamp, source = self._member_events.get(timeout=0.1)
+                event, timestamp, source = self._member_events.get(timeout=0.1)
             except queue.Empty:
+                continue
+
+            # A member event that is not a state change is a one-shot action —
+            # the pad choosing a sound or switching the picture. Fusion has no
+            # opinion about those: pass them through untouched.
+            if event not in ("lift", "replace"):
+                if self._events is not None:
+                    self._events.put((event, timestamp, source))
                 continue
 
             lifted = self.is_lifted()
