@@ -199,9 +199,11 @@ class AudioEngine:
 
         was_playing, was_looping = self.is_playing, self._looping
         previous, previous_sound = self._audio_path, self._sound
-        if previous_sound is not None:
-            previous_sound.stop()
+        # Load before stopping anything: reading a minute of audio off the SD
+        # card takes real time, and the outgoing sound covers it — a song
+        # change must never leave the room silent.
         self._audio_path = path
+        self._sound = None
         self._load()
         if self._sound is None:
             # A sound that will not load leaves the piece silent; go back to the
@@ -209,6 +211,8 @@ class AudioEngine:
             LOGGER.error("Could not load %s; returning to %s", path.name, previous.name)
             self._audio_path, self._sound = previous, previous_sound
             self._duration_s = previous_sound.get_length() if previous_sound else 0.0
+        elif previous_sound is not None:
+            previous_sound.stop()
 
         if was_playing:
             self.play_looping() if was_looping else self.play_from_start()
