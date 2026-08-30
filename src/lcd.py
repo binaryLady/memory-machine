@@ -83,6 +83,24 @@ DEFAULT_INSTRUCTION_PAGES: tuple[tuple[str, ...], ...] = (
 # centered title reaches, alternating with the beat like the show corners.
 INSTRUCTION_STARS = (((0, 18),), ((0, 19),))
 
+# One-shot actions answered in the piece's own voice — the words hold the
+# label line briefly, then the state word returns. They echo the instruction
+# deck: "A or B: I refract", "ARROWS: my voices".
+NOTICE_SECONDS = 3.0
+NOTICE_LABELS = {
+    "kaleidoscope_on": "I refract",
+    "kaleidoscope_off": "I cohere",
+    "audio": "another voice",
+}
+
+
+def notice_label(notice: tuple[str, float] | None, now: float) -> str | None:
+    """The words an action left on the panel, while they are still fresh."""
+    if notice is None:
+        return None
+    text, until = notice
+    return text if now < until else None
+
 
 @dataclass(frozen=True)
 class PanelIcon:
@@ -518,6 +536,7 @@ class Heartbeat:
         self._config = config
         self._status = status
         self._state = "IDLE"
+        self._notice: tuple[str, float] | None = None
         self._lcd: Hd44780I2c | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -582,6 +601,9 @@ class Heartbeat:
     def set_state(self, state: str) -> None:
         self._state = state
 
+    def set_notice(self, text: str) -> None:
+        self._notice = (text, time.monotonic() + NOTICE_SECONDS)
+
     def stop(self) -> None:
         self._stop.set()
         if self._thread is not None:
@@ -645,7 +667,7 @@ class Heartbeat:
                     # big heart beating at the center, the word beneath it.
                     since = None if woke_at is None else now - woke_at
                     mood = show_mood(current, since)
-                    word = mood_word(mood, self._labels)
+                    word = notice_label(self._notice, now) or mood_word(mood, self._labels)
                     view = show_view(mood)
                     full = beat_is_full(now, bpm)
 
@@ -684,12 +706,15 @@ class Heartbeat:
                             if index >= len(last_rows) or last_rows[index] != row:
                                 lcd.write_at(index, 0, row)
                         last_rows = rows
-                    elif view == "interacting" and (mood != last_mood or not last_rows):
+                    elif view == "interacting":
+                        # Compared as rows rather than moods, so a notice
+                        # changing the word redraws too.
                         rows = interacting_rows(self._title, word)
-                        for index, row in enumerate(rows):
-                            if index >= len(last_rows) or last_rows[index] != row:
-                                lcd.write_at(index, 0, row)
-                        last_rows = rows
+                        if rows != last_rows:
+                            for index, row in enumerate(rows):
+                                if index >= len(last_rows) or last_rows[index] != row:
+                                    lcd.write_at(index, 0, row)
+                            last_rows = rows
 
                     if rows_due or full != last_full or mood != last_mood:
                         if mood != last_mood:
@@ -745,7 +770,8 @@ class Heartbeat:
                         read_temperature_c(),
                         int(snapshot.get("lift_count", 0)),
                         now - self._started_at,
-                        label=state_label(self._state, since_wake, self._labels),
+                        label=notice_label(self._notice, now)
+                        or state_label(self._state, since_wake, self._labels),
                         title=self._title,
                     )
                     for index, row in enumerate(rows):
@@ -812,6 +838,10 @@ class Panels:
     def set_state(self, state: str) -> None:
         for panel in self._panels:
             panel.set_state(state)
+
+    def set_notice(self, text: str) -> None:
+        for panel in self._panels:
+            panel.set_notice(text)
 
     def stop(self) -> None:
         for panel in self._panels:
