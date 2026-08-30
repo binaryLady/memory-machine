@@ -229,7 +229,7 @@ class VideoEngine:
             else:
                 cap = self._cap
                 target = int(self._current_index)
-            self._advance_to(cap, target)
+            self._seek_to(cap, target)
             self._show(self._last_frame)
 
     def _open(self, path: Path, label: str) -> Any:
@@ -369,6 +369,27 @@ class VideoEngine:
             return
         cap.set(self._cv2.CAP_PROP_POS_FRAMES, 0)
         self._stream_pos = 0
+
+    def _seek_to(self, cap: Any, target: int) -> None:
+        """One jump to `target`, for a clip swap only.
+
+        Playback never seeks — _advance_to decodes forward — but a swap
+        mid-piece must not decode a thousand frames to reach the visitor's
+        place: that is seconds of frozen picture under a held button.
+        """
+        if cap is None:
+            return
+        if not cap.set(self._cv2.CAP_PROP_POS_FRAMES, target):
+            self._rewind(cap)
+            self._advance_to(cap, target)
+            return
+        ok, frame = cap.read()
+        if not ok:
+            self._rewind(cap)
+            self._advance_to(cap, target)
+            return
+        self._last_frame = frame
+        self._stream_pos = target + 1
 
     def _advance_to(self, cap: Any, target: int) -> None:
         """Read forward until _last_frame holds `target`, without ever seeking.
