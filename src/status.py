@@ -32,6 +32,8 @@ class Status:
     sensor_name: str = "unknown"
     sensor_engaged: bool = False
     lift_count: int = 0
+    observers_today: int = 0
+    observers_total: int = 0
     accepted_count: int = 0
     rejected_count: int = 0
     audio_sink: str = "unknown"
@@ -48,6 +50,8 @@ class Status:
             "sensor_name": self.sensor_name,
             "sensor_engaged": self.sensor_engaged,
             "lift_count": self.lift_count,
+            "observers_today": self.observers_today,
+            "observers_total": self.observers_total,
             "accepted_count": self.accepted_count,
             "rejected_count": self.rejected_count,
             "audio_sink": self.audio_sink,
@@ -89,8 +93,15 @@ class StatusWriter:
         self._status.state = state
         self.write()
 
+    def seed_observers(self, today: int, total: int) -> None:
+        """Start the aggregate from the journal, so restarts do not zero it."""
+        self._status.observers_today = today
+        self._status.observers_total = total
+
     def lift_accepted(self) -> None:
         self._status.lift_count += 1
+        self._status.observers_today += 1
+        self._status.observers_total += 1
         self._status.accepted_count += 1
         self.write()
 

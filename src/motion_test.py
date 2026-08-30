@@ -342,6 +342,7 @@ def run(argv: list[str] | None = None) -> int:
         heartbeat = Panels(cfg, status)
         heartbeat.start()
         journal = Journal(state_dir / "journal")
+        status.seed_observers(*journal.lift_counts())
         log_path = state_dir / "motion-player.log"
         telemetry = Telemetry(cfg, status, log_path)
 

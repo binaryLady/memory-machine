@@ -29,6 +29,31 @@ def day_name(clock: Callable[[], time.struct_time]) -> str:
     return time.strftime("%Y-%m-%d", clock())
 
 
+def count_lifts(directory: Path, today: str) -> tuple[int, int]:
+    """Observers so far as (today, whole show), read from the day files.
+
+    The in-memory counter dies with every restart; this is the aggregate the
+    panel shows instead. Counted once at startup — the running piece adds to
+    the totals in memory from there.
+    """
+    marker = '"event":"lift"'
+    today_count = 0
+    total = 0
+    try:
+        days = sorted(directory.glob("*.jsonl"))
+    except OSError:
+        return 0, 0
+    for path in days:
+        try:
+            lifts = sum(marker in line for line in path.open(encoding="utf-8"))
+        except OSError:
+            continue
+        total += lifts
+        if path.stem == today:
+            today_count = lifts
+    return today_count, total
+
+
 class Journal:
     """Appends interaction events to the day's log. Never raises.
 
@@ -40,6 +65,10 @@ class Journal:
         self._directory = directory
         self._clock = clock or time.localtime
         self._warned = False
+
+    def lift_counts(self) -> tuple[int, int]:
+        """Observers as (today, whole show), from the files on disk."""
+        return count_lifts(self._directory, day_name(self._clock))
 
     def record(self, event: str, **fields: Any) -> None:
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%S", self._clock())
