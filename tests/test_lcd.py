@@ -537,3 +537,22 @@ def test_a_fresh_notice_takes_the_label_line() -> None:
 def test_a_stale_notice_gives_the_line_back() -> None:
     assert lcd.notice_label(("I refract", 10.0), now=10.0) is None
     assert lcd.notice_label(None, now=0.0) is None
+
+
+def test_an_answering_burst_lights_every_star() -> None:
+    shown, hidden = lcd.art_stars(full=False, burst=True)
+    assert set(shown) == set(lcd.STARS_A + lcd.STARS_B)
+    assert hidden == ()
+
+
+def test_without_a_burst_the_sky_keeps_its_counter_phase() -> None:
+    assert lcd.art_stars(full=True, burst=False) == (lcd.STARS_A, lcd.STARS_B)
+    assert lcd.art_stars(full=False, burst=False) == (lcd.STARS_B, lcd.STARS_A)
+
+
+def test_notice_rows_take_the_deck_at_panel_width() -> None:
+    rows = lcd.notice_rows("Memory<>Machine", "I refract")
+    assert len(rows) == lcd.ROWS
+    assert all(len(row) == lcd.COLUMNS for row in rows)
+    assert "I refract" in rows[2]
+    assert "Memory<>Machine" in rows[0]

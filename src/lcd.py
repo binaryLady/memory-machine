@@ -189,6 +189,23 @@ def parse_icon_art(text: str) -> PanelIcon:
 STARS_A = ((0, 3), (0, 16), (1, 6), (2, 13), (3, 4), (3, 15))
 STARS_B = ((0, 8), (0, 12), (1, 14), (2, 5), (3, 9), (3, 18))
 
+
+def art_stars(full: bool, burst: bool) -> tuple[tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]]:
+    """The art layout's sky as (shown, hidden): a counter-phase twinkle — or,
+    while the piece is answering a control, every star lit at once. Without
+    text (ROM characters would lie sideways on a portrait mount), the full sky
+    is this layout's whole voice, the same word the show layout's hello uses.
+    """
+    if burst:
+        return STARS_A + STARS_B, ()
+    return (STARS_A, STARS_B) if full else (STARS_B, STARS_A)
+
+
+def notice_rows(title: str, text: str) -> list[str]:
+    """The instruction deck yields the panel to an action's words, then resumes."""
+    rows = [center_line(title), "", center_line(text), ""]
+    return [row[:COLUMNS].ljust(COLUMNS) for row in rows]
+
 # Show layout: the panel narrates the piece — title always up, the state's
 # word beside a beating heart, health beneath, stars twinkling in the corners
 # the text never reaches. A centered 18-column title uses row 0 columns 1-18,
@@ -624,6 +641,7 @@ class Heartbeat:
         assert self._lcd is not None
         lcd = self._lcd
         last_full: bool | None = None
+        last_burst = False
         last_mood: str | None = None
         last_view: str | None = None
         last_rows: list[str] = []
@@ -751,7 +769,9 @@ class Heartbeat:
                     # the rows that changed, and the icon's beat below stays
                     # the shared heartbeat machinery.
                     index = page_index(now - self._started_at, self._page_seconds, len(self._pages))
-                    rows = instruction_rows(self._pages, index)
+                    notice = notice_label(self._notice, now)
+                    rows = (notice_rows(self._title, notice) if notice
+                            else instruction_rows(self._pages, index))
                     if rows != last_rows:
                         for row_index, row in enumerate(rows):
                             if row_index >= len(last_rows) or last_rows[row_index] != row:
@@ -784,7 +804,9 @@ class Heartbeat:
 
                 if self._icon is not None:
                     full = beat_is_full(now, bpm)
-                    if full != last_full:
+                    burst = (self._layout == "art"
+                             and notice_label(self._notice, now) is not None)
+                    if full != last_full or burst != last_burst:
                         origin_row, origin_col = (
                             icon_origin(self._icon) if self._layout == "art" else (0, 0)
                         )
@@ -798,7 +820,7 @@ class Heartbeat:
                         if self._layout == "art":
                             # Stars twinkle in counter-phase with the beat —
                             # ROM asterisks, so they cost no glyph slots.
-                            shown, hidden = (STARS_A, STARS_B) if full else (STARS_B, STARS_A)
+                            shown, hidden = art_stars(full, burst)
                             for row, col in hidden:
                                 lcd.write_at(row, col, " ")
                             for row, col in shown:
@@ -811,6 +833,7 @@ class Heartbeat:
                             for row, col in shown:
                                 lcd.write_at(row, col, "*")
                         last_full = full
+                        last_burst = burst
             except Exception as exc:  # noqa: BLE001
                 LOGGER.error("LCD panel write failed; stopping the panel: %s", exc)
                 return
