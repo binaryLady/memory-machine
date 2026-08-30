@@ -241,7 +241,10 @@ joins the filename — `piece.kaleidoscope.1280x800.mp4` — so variants live
 side by side and the config names the one that plays. A non-default `--mode`
 joins it the same way — `piece.1280x800.fill.mp4` — because the mode decides
 the framing, and a render named only for its size would be ambiguous between a
-padded one and a cropped one. None combine with `--mode tile`.
+padded one and a cropped one. `--rotate` joins too — `piece.1280x800.fill.cw.mp4` —
+for the same reason: a turned and an unturned render must never share a name,
+or re-running with the other flag silently keeps whichever was built first.
+None combine with `--mode tile`.
 
 Anything else compositional — a different framing, a deliberate arrangement,
 motion that responds to the shape — belongs in an editor. Prepare the file
