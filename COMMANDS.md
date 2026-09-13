@@ -1211,6 +1211,7 @@ description, edit the comments in `config/config.default.ini` and run
 | `batch_size` | `10` | — |
 | `timeout_s` | `5` | — |
 | `log_tail_lines` | `20` | — |
+| `auth_token` | `*(empty)*` | Sent as "Authorization: Bearer <token>" when set. Use it whenever the endpoint requires one, and only over https:// — over http:// the token travels in the clear. Keep real tokens in your local config, never here. |
 
 <!-- config-reference:end -->
 

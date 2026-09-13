@@ -61,6 +61,7 @@ class Telemetry:
         self._batch_size = max(1, config.telemetry.batch_size)
         self._timeout_s = max(1, config.telemetry.timeout_s)
         self._log_tail_lines = max(0, config.telemetry.log_tail_lines)
+        self._auth_token = config.telemetry.auth_token
         self._mode = str(getattr(getattr(config, "system", None), "mode", "production"))
         self._log_path = log_path
         self._status = status
@@ -75,6 +76,8 @@ class Telemetry:
         if self._enabled and not self._endpoint:
             LOGGER.warning("Telemetry enabled but endpoint_url is empty; disabling")
             self._enabled = False
+        if self._enabled and self._auth_token and not self._endpoint.lower().startswith("https://"):
+            LOGGER.warning("Telemetry auth_token is set but endpoint_url is not https; the token is sent in the clear")
 
     def start(self) -> None:
         if not self._enabled:
@@ -226,15 +229,13 @@ class Telemetry:
         if not batch:
             return
         payload = json.dumps(batch, separators=(",", ":")).encode("utf-8")
-        req = urllib.request.Request(
-            self._endpoint,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "motion-player-telemetry/1.0",
-            },
-            method="POST",
-        )
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "motion-player-telemetry/1.0",
+        }
+        if self._auth_token:
+            headers["Authorization"] = f"Bearer {self._auth_token}"
+        req = urllib.request.Request(self._endpoint, data=payload, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=self._timeout_s) as resp:
                 if resp.status >= 400:

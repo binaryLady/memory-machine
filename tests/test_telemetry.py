@@ -51,6 +51,7 @@ class _TelemetryConfig:
     batch_size: int
     timeout_s: int
     log_tail_lines: int
+    auth_token: str = ""
 
 
 @dataclass
@@ -254,3 +255,58 @@ def test_test_runs_ship_the_log_for_troubleshooting(tmp_path) -> None:
 
     assert batch[0]["log_tail"] == ["line one\n", "line two\n"]
     assert "_wants_log_tail" not in batch[0]
+
+
+class _HeaderHandler(BaseHTTPRequestHandler):
+    seen: list[str | None] = []
+
+    def do_POST(self) -> None:
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        _HeaderHandler.seen.append(self.headers.get("Authorization"))
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+def _post_one(auth_token: str) -> list[str | None]:
+    _HeaderHandler.seen = []
+    server = HTTPServer(("127.0.0.1", 0), _HeaderHandler)
+    Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}/telemetry"
+    cfg = _Config(
+        _TelemetryConfig(
+            enabled=True, endpoint_url=url, interval_s=60, batch_size=10, timeout_s=2, log_tail_lines=0,
+            auth_token=auth_token,
+        )
+    )
+    tel = Telemetry(cfg, _fake_status())
+    tel.start()
+    tel.event("lift")
+    time.sleep(0.2)
+    tel.stop()
+    server.shutdown()
+    return _HeaderHandler.seen
+
+
+def test_auth_token_is_sent_as_a_bearer_header() -> None:
+    seen = _post_one("s3cret-token")
+    assert seen and all(h == "Bearer s3cret-token" for h in seen)
+
+
+def test_no_authorization_header_without_a_token() -> None:
+    seen = _post_one("")
+    assert seen and all(h is None for h in seen)
+
+
+def test_auth_token_is_read_from_config_and_trimmed(tmp_path: Path) -> None:
+    ini = tmp_path / "config.ini"
+    ini.write_text("[telemetry]\nauth_token =   abc123  \n")
+    assert config_module.load(str(ini)).telemetry.auth_token == "abc123"
+
+
+def test_auth_token_defaults_to_empty(tmp_path: Path) -> None:
+    ini = tmp_path / "config.ini"
+    ini.write_text("[telemetry]\nenabled = false\n")
+    assert config_module.load(str(ini)).telemetry.auth_token == ""
