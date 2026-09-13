@@ -152,6 +152,7 @@ class TelemetryConfig:
     batch_size: int
     timeout_s: int
     log_tail_lines: int
+    auth_token: str = ""
 
 
 @dataclass(frozen=True)
@@ -296,6 +297,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "batch_size": 10,
         "timeout_s": 5,
         "log_tail_lines": 20,
+        "auth_token": "",
     },
 }
 
@@ -644,6 +646,7 @@ def load(path: str = "/etc/motion-player/config.ini") -> Config:
             log_tail_lines=_parse_int(
                 telemetry_raw.get("log_tail_lines"), DEFAULTS["telemetry"]["log_tail_lines"], 0
             ),
+            auth_token=str(telemetry_raw.get("auth_token", DEFAULTS["telemetry"]["auth_token"])).strip(),
         ),
         source_path=source,
     )
